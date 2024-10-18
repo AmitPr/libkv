@@ -11,7 +11,7 @@ use disjoint_impls::disjoint_impls;
 
 use sealed::*;
 
-pub trait Key: Debug {
+pub trait Key {
     type Error;
 
     fn encode(&self) -> Vec<u8>;
@@ -60,9 +60,17 @@ impl<V> NodeType for Leaf<V> {}
 impl<Inner: Node> Sealed for Branch<Inner> {}
 impl<Inner: Node> NodeType for Branch<Inner> {}
 
-pub trait Node: NodeValue {
+pub trait Node: NodeValue + Sized {
     type Category: NodeType;
-    type Key: Key;
+    type KeySegment: Key;
+    type FullKey: Key;
+
+    // type Accessor: NodeAccessor<Self>;
+}
+
+trait NodeAccessor<N: Node> {
+    fn get(&self, key: impl Into<N::KeySegment>) -> Option<N::Value>;
+    fn set(&mut self, key: impl Into<N::KeySegment>, value: N::Value);
 }
 
 disjoint_impls! {
@@ -79,11 +87,13 @@ disjoint_impls! {
     }
 }
 
-pub struct Item<V>(V);
+#[derive(Debug)]
+pub struct Item<V>(PhantomData<V>);
 
 impl<V> Node for Item<V> {
     type Category = Leaf<V>;
-    type Key = ();
+    type KeySegment = ();
+    type FullKey = ();
 }
 
 /// An Iterable Map built atop a KV store
@@ -93,32 +103,127 @@ pub struct Map<K: Key, V: Node> {
 
 impl<K: Key, V: Node<Category = Branch<M>>, M: Node> Node for Map<K, V> {
     type Category = Branch<V>;
-    type Key = CompoundKey<K, V::Key>;
+    type KeySegment = K;
+    type FullKey = CompoundKey<K, V::KeySegment>;
 }
 
+// Flatten Key if the Value is an Item.
 impl<K: Key, T> Node for Map<K, Item<T>> {
     type Category = Branch<Item<T>>;
-    type Key = K;
+    type KeySegment = K;
+    type FullKey = K;
+}
+
+/*
+TODO: Working through Accessor semantics and DX.
+
+How would I want to use an accessor?
+let map: Map<String, Item<()>> = Map::new();
+map.key("foo").get();
+let map: Map<String, Map<String, Item<String>>> = Map::new();
+map.key("foo").key("bar").get();
+map.key(("foo", "bar")).get();
+map.key("foo").key("bar").set("baz");
+
+concretely:
+Map<K,V>::key -> PartialKey<K, V>
+
+*/
+
+#[derive(Debug)]
+struct PartialKey<K: Key, Inner> {
+    partial: K,
+    _marker: PhantomData<Inner>,
+}
+
+// Can only get and set if the value is a Leaf.
+impl<K: Key, Inner: Node<Category = Leaf<V>>, V> PartialKey<K, Inner> {
+    fn get(&self) -> Option<V> {
+        unimplemented!()
+    }
+
+    fn set(&self, value: V) {
+        unimplemented!()
+    }
+}
+// Otherwise, can keep chaining keys.
+impl<K: Key, Inner: Node<Category = Branch<M>, KeySegment = K>, M: Node> PartialKey<K, Inner> {
+    fn key(
+        self,
+        key: impl Into<Inner::KeySegment>,
+    ) -> PartialKey<CompoundKey<K, Inner::KeySegment>, M> {
+        PartialKey {
+            partial: CompoundKey(self.partial, key.into()),
+            _marker: PhantomData,
+        }
+    }
+}
+
+impl<K: Key, Inner> Key for PartialKey<K, Inner> {
+    type Error = K::Error;
+    fn encode(&self) -> Vec<u8> {
+        self.partial.encode()
+    }
+
+    fn decode(bytes: &mut &[u8]) -> Result<Self, Self::Error> {
+        let partial = K::decode(bytes)?;
+        Ok(PartialKey {
+            partial,
+            _marker: PhantomData,
+        })
+    }
+}
+
+disjoint_impls! {
+    trait Access: Node {
+        type Inner;
+        fn key(&self, key: impl Into<Self::KeySegment>) -> PartialKey<Self::KeySegment, Self::Inner> {
+            PartialKey {
+                partial: key.into(),
+                _marker: PhantomData,
+            }
+        }
+    }
+    impl<N: Node<Category = Branch<M>>, M: Node> Access for N {
+        type Inner = M;
+    }
+    impl<N: Node<Category = Leaf<V>>, V> Access for N {
+        type Inner = N;
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::any::type_name;
 
     #[test]
     fn test_map_compiles() {
-        type t = Map<String, Item<()>>;
-        type t2 = Map<String, Map<String, Item<()>>>;
+        type Map1 = Map<String, Item<()>>;
+        type Map2 = Map<String, Map<String, Item<()>>>;
 
-        println!("{}", std::any::type_name::<<t as Node>::Category>());
-        println!("{}", std::any::type_name::<<t as Node>::Key>());
-        println!("{}", std::any::type_name::<<t as NodeValue>::Value>());
+        println!("{}", type_name::<<Map1 as Node>::Category>());
+        println!("{}", type_name::<<Map1 as Node>::KeySegment>());
+        println!("{}", type_name::<<Map1 as NodeValue>::Value>());
 
-        println!("{}", std::any::type_name::<<t2 as Node>::Category>());
-        println!("{}", std::any::type_name::<<t2 as Node>::Key>());
-        println!("{}", std::any::type_name::<<t2 as NodeValue>::Value>());
+        println!("{}", type_name::<<Map2 as Node>::Category>());
+        println!("{}", type_name::<<Map2 as Node>::KeySegment>());
+        println!("{}", type_name::<<Map2 as NodeValue>::Value>());
 
-        let x: <t2 as Node>::Key = ("foo".to_string(), "bar".to_string()).into();
+        let x: <Map2 as Node>::FullKey = ("foo".to_string(), "bar".to_string()).into();
         println!("{:?}", x);
+
+        let map: Map<String, Item<()>> = Map {
+            _marker: PhantomData,
+        };
+        let acc: PartialKey<String, Item<()>> = map.key("foo");
+        println!("{:?} -> {:?}", acc, acc.encode());
+        let map: Map<String, Map<String, Item<String>>> = Map {
+            _marker: PhantomData,
+        };
+        let acc: PartialKey<String, Map<String, Item<String>>> = map.key("foo");
+        println!("{:?} -> {:?}", acc.partial, acc.encode());
+        let acc: PartialKey<CompoundKey<String, String>, Item<String>> = acc.key("bar");
+        println!("{:?} -> {:?}", acc, acc.encode());
     }
 }
