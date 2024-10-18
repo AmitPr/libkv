@@ -1,13 +1,29 @@
-use crate::{CompoundKey, FixedSize, Key};
+use std::convert::Infallible;
+
+use crate::{varint::from_length_prefixed_bytes, CompoundKey, Key};
 
 impl Key for () {
-    type Size = FixedSize<0>;
-
+    type Error = Infallible;
     fn encode(&self) -> Vec<u8> {
         vec![]
     }
 
-    fn decode(bytes: &mut &[u8]) -> Self {}
+    fn decode(bytes: &mut &[u8]) -> Result<Self, Self::Error> {
+        Ok(())
+    }
+}
+
+impl Key for String {
+    //TODO: Actually handle errors
+    type Error = ();
+    fn encode(&self) -> Vec<u8> {
+        crate::varint::to_length_prefixed_bytes(self)
+    }
+
+    fn decode(bytes: &mut &[u8]) -> Result<Self, Self::Error> {
+        let data = from_length_prefixed_bytes(bytes).ok_or(())?;
+        String::from_utf8(data).map_err(|_| ())
+    }
 }
 
 macro_rules! compound_key_type {

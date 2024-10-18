@@ -5,93 +5,25 @@ mod sealed;
 mod trait_impls;
 mod varint;
 
-use std::marker::PhantomData;
+use std::{fmt::Debug, marker::PhantomData};
 
-pub use varint::to_varint_u128;
+use disjoint_impls::disjoint_impls;
 
 use sealed::*;
 
-trait NodeType: Sealed {}
-
-pub struct Leaf;
-seal!(Leaf);
-impl NodeType for Leaf {}
-
-pub struct Branch;
-seal!(Branch);
-impl NodeType for Branch {}
-
-trait Node {
-    // TODO: Name this something better.
-    type Category: NodeType;
-    // TODO: Name this something better.
-    type Key: Key;
-
-    type Value;
-}
-
-trait Key {
-    // TODO: Name this something better.
-    type Size: SizeHint;
+pub trait Key: Debug {
+    type Error;
 
     fn encode(&self) -> Vec<u8>;
 
     /// Decode a key from a byte slice, consuming the bytes necessary to decode the key.
-    fn decode(bytes: &mut &[u8]) -> Self;
+    fn decode(bytes: &mut &[u8]) -> Result<Self, Self::Error>
+    where
+        Self: Sized;
 }
 
-pub trait SizeHint: Sealed {}
-
-pub struct FixedSize<const SIZE: usize>;
-impl<const SIZE: usize> Sealed for FixedSize<SIZE> {}
-impl<const SIZE: usize> SizeHint for FixedSize<SIZE> {}
-
-pub struct VariableSize;
-seal!(VariableSize);
-impl SizeHint for VariableSize {}
-
-trait KeyEncoder {
-    const RULE: EncodingRule;
-}
-
-enum EncodingRule {
-    /// The remainder of the key is a single segment.
-    Consume,
-    /// The next segment of the key has a varint-prefixed length.
-    Prefixed,
-    /// The next segment of the key is a fixed number of bytes.
-    Fixed(usize),
-}
-
-// A dynamic key only length-prefixes if it is used in a non-terminal context.
-impl KeyEncoder for (VariableSize, Leaf) {
-    const RULE: EncodingRule = EncodingRule::Consume;
-}
-
-// A dynamic key length-prefixes if it is used in a non-terminal context.
-impl KeyEncoder for (VariableSize, Branch) {
-    const RULE: EncodingRule = EncodingRule::Prefixed;
-}
-
-// A fixed-size key consumes if it is used in a terminal context.
-impl<const SIZE: usize> KeyEncoder for (FixedSize<SIZE>, Leaf) {
-    const RULE: EncodingRule = EncodingRule::Consume;
-}
-
-// A fixed-size key has a const-defined length if it is used in a non-terminal context.
-impl<const SIZE: usize> KeyEncoder for (FixedSize<SIZE>, Branch) {
-    const RULE: EncodingRule = EncodingRule::Fixed(SIZE);
-}
-
-// impl Key for String {
-//     type Size = VariableSize;
-
-//     fn encode(&self) -> Vec<u8> {
-//         self.as_bytes().to_vec()
-//     }
-// }
-
-struct CompoundKey<T: Key, U: Key>(T, U);
+#[derive(Debug)]
+pub struct CompoundKey<T: Key, U: Key>(T, U);
 impl<K: Key> CompoundKey<K, ()> {
     pub fn new(key: K) -> Self {
         CompoundKey(key, ())
@@ -99,18 +31,17 @@ impl<K: Key> CompoundKey<K, ()> {
 }
 
 impl<T: Key, U: Key> Key for CompoundKey<T, U> {
-    type Size = VariableSize;
-
+    type Error = (Option<T::Error>, Option<U::Error>);
     fn encode(&self) -> Vec<u8> {
         let mut bytes = self.0.encode();
         bytes.extend_from_slice(&self.1.encode());
         bytes
     }
 
-    fn decode(bytes: &mut &[u8]) -> Self {
-        let key = T::decode(bytes);
-        let unit = U::decode(bytes);
-        CompoundKey(key, unit)
+    fn decode(bytes: &mut &[u8]) -> Result<Self, Self::Error> {
+        let key = T::decode(bytes).map_err(|e| (Some(e), None))?;
+        let unit = U::decode(bytes).map_err(|e| (None, Some(e)))?;
+        Ok(CompoundKey(key, unit))
     }
 }
 
@@ -120,7 +51,74 @@ impl<T: Key, U: Key> CompoundKey<T, U> {
     }
 }
 
+pub trait NodeType: Sealed {}
+
+pub struct Leaf<V>(PhantomData<V>);
+pub struct Branch<Inner: Node>(PhantomData<Inner>);
+impl<V> Sealed for Leaf<V> {}
+impl<V> NodeType for Leaf<V> {}
+impl<Inner: Node> Sealed for Branch<Inner> {}
+impl<Inner: Node> NodeType for Branch<Inner> {}
+
+pub trait Node: NodeValue {
+    type Category: NodeType;
+    type Key: Key;
+}
+
+disjoint_impls! {
+    pub trait NodeValue {
+        type Value;
+    }
+
+    impl<N: Node<Category = Branch<M>>, M: Node + NodeValue> NodeValue for N {
+        type Value = <M as NodeValue>::Value;
+    }
+
+    impl<N: Node<Category = Leaf<V>>, V> NodeValue for N {
+        type Value = V;
+    }
+}
+
+pub struct Item<V>(V);
+
+impl<V> Node for Item<V> {
+    type Category = Leaf<V>;
+    type Key = ();
+}
+
 /// An Iterable Map built atop a KV store
-pub struct Map<K: Key, V> {
+pub struct Map<K: Key, V: Node> {
     _marker: PhantomData<(K, V)>,
+}
+
+impl<K: Key, V: Node<Category = Branch<M>>, M: Node> Node for Map<K, V> {
+    type Category = Branch<V>;
+    type Key = CompoundKey<K, V::Key>;
+}
+
+impl<K: Key, T> Node for Map<K, Item<T>> {
+    type Category = Branch<Item<T>>;
+    type Key = K;
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_map_compiles() {
+        type t = Map<String, Item<()>>;
+        type t2 = Map<String, Map<String, Item<()>>>;
+
+        println!("{}", std::any::type_name::<<t as Node>::Category>());
+        println!("{}", std::any::type_name::<<t as Node>::Key>());
+        println!("{}", std::any::type_name::<<t as NodeValue>::Value>());
+
+        println!("{}", std::any::type_name::<<t2 as Node>::Category>());
+        println!("{}", std::any::type_name::<<t2 as Node>::Key>());
+        println!("{}", std::any::type_name::<<t2 as NodeValue>::Value>());
+
+        let x: <t2 as Node>::Key = ("foo".to_string(), "bar".to_string()).into();
+        println!("{:?}", x);
+    }
 }
