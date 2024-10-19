@@ -3,7 +3,7 @@ mod item;
 mod map;
 mod nodetype;
 pub use {
-    access::{Access, PartialKey},
+    access::{Access, Accessor},
     item::Item,
     map::Map,
     nodetype::*,

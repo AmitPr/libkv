@@ -9,8 +9,8 @@ use super::{Branch, Leaf, Node};
 disjoint_impls! {
     pub trait Access: Node {
         type Inner;
-        fn key(&self, key: impl Into<Self::KeySegment>) -> PartialKey<Self::KeySegment, Self::Inner> {
-            PartialKey {
+        fn key(&self, key: impl Into<Self::KeySegment>) -> Accessor<Self::KeySegment, Self::Inner> {
+            Accessor {
                 partial: key.into(),
                 _marker: PhantomData,
             }
@@ -41,13 +41,13 @@ Map<K,V>::key -> PartialKey<K, V>
 */
 
 #[derive(Debug)]
-pub struct PartialKey<K: Key, Inner> {
+pub struct Accessor<K: Key, Inner> {
     pub partial: K,
     _marker: PhantomData<Inner>,
 }
 
 // Can only get and set if the value is a Leaf.
-impl<K: Key, Inner: Node<Category = Leaf<V>>, V> PartialKey<K, Inner> {
+impl<K: Key, Inner: Node<Category = Leaf<V>>, V> Accessor<K, Inner> {
     fn get(&self) -> Option<V> {
         unimplemented!()
     }
@@ -57,12 +57,12 @@ impl<K: Key, Inner: Node<Category = Leaf<V>>, V> PartialKey<K, Inner> {
     }
 }
 // Otherwise, can keep chaining keys.
-impl<K: Key, Inner: Node<Category = Branch<M>, KeySegment = K>, M: Node> PartialKey<K, Inner> {
+impl<K: Key, Inner: Node<Category = Branch<M>, KeySegment = K>, M: Node> Accessor<K, Inner> {
     pub fn key(
         self,
         key: impl Into<Inner::KeySegment>,
-    ) -> PartialKey<CompoundKey<K, Inner::KeySegment>, M> {
-        PartialKey {
+    ) -> Accessor<CompoundKey<K, Inner::KeySegment>, M> {
+        Accessor {
             partial: CompoundKey(self.partial, key.into()),
             _marker: PhantomData,
         }
@@ -72,15 +72,15 @@ impl<K: Key, Inner: Node<Category = Branch<M>, KeySegment = K>, M: Node> Partial
     pub fn full(
         self,
         key: impl Into<Inner::FullKey>,
-    ) -> PartialKey<CompoundKey<K, Inner::FullKey>, M::Leaf> {
-        PartialKey {
+    ) -> Accessor<CompoundKey<K, Inner::FullKey>, M::Leaf> {
+        Accessor {
             partial: CompoundKey(self.partial, key.into()),
             _marker: PhantomData,
         }
     }
 }
 
-impl<K: Key, Inner> Key for PartialKey<K, Inner> {
+impl<K: Key, Inner> Key for Accessor<K, Inner> {
     type Error = K::Error;
     fn encode(&self) -> Vec<u8> {
         self.partial.encode()
@@ -88,7 +88,7 @@ impl<K: Key, Inner> Key for PartialKey<K, Inner> {
 
     fn decode(bytes: &mut &[u8]) -> Result<Self, Self::Error> {
         let partial = K::decode(bytes)?;
-        Ok(PartialKey {
+        Ok(Accessor {
             partial,
             _marker: PhantomData,
         })
