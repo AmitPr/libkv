@@ -11,11 +11,19 @@ pub trait Key {
 
 #[derive(Debug)]
 pub struct CompoundKey<T: Key, U: Key>(pub T, pub U);
+
 impl<K: Key> CompoundKey<K, ()> {
     pub fn new(key: K) -> Self {
         CompoundKey(key, ())
     }
 }
+
+// TODO: This would be nice, but need an impl that "auto-flattens" the type
+// impl<K: Key> CompoundKey<(), K> {
+//     pub fn flatten(self) -> K {
+//         self.1
+//     }
+// }
 
 impl<T: Key, U: Key> Key for CompoundKey<T, U> {
     type Error = (Option<T::Error>, Option<U::Error>);

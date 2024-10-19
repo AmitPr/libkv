@@ -12,7 +12,7 @@ pub struct Item<V, P: Key = ()> {
 
 // Only manually construct items if no prefix (root).
 impl<V> Item<V> {
-    pub fn new<K: Key>(key: K) -> <Self as Node>::Prefixed<K> {
+    pub const fn new<K: Key>(key: K) -> <Self as Node>::Prefixed<K> {
         Item::<V, K> {
             prefix: key,
             _marker: PhantomData,
@@ -21,10 +21,11 @@ impl<V> Item<V> {
 }
 
 impl<V, P: Key> Item<V, P> {
+    // TODO, should actually access a storage layer.
     pub fn get(&self) -> Option<V> {
         let key = self.prefix.encode();
         println!("Getting key: {:?}", key);
-        unimplemented!()
+        todo!()
     }
 }
 

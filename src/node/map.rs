@@ -68,3 +68,15 @@ pub struct MapAccessor<N: Node, K: Key> {
     pub partial: K,
     _marker: PhantomData<N>,
 }
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn test_map() {
+        const MAP: Map<String, Item<()>> = Map::new();
+        let access = MAP.key("foo");
+        println!("{:?}", access);
+    }
+}
