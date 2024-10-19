@@ -1,6 +1,6 @@
 use std::convert::Infallible;
 
-use crate::{varint::from_length_prefixed_bytes, CompoundKey, Key};
+use crate::{serialization::from_length_prefixed_bytes, CompoundKey, Key};
 
 impl Key for () {
     type Error = Infallible;
@@ -17,7 +17,7 @@ impl Key for String {
     //TODO: Actually handle errors
     type Error = ();
     fn encode(&self) -> Vec<u8> {
-        crate::varint::to_length_prefixed_bytes(self)
+        crate::serialization::to_length_prefixed_bytes(self)
     }
 
     fn decode(bytes: &mut &[u8]) -> Result<Self, Self::Error> {

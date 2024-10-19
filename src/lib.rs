@@ -2,8 +2,8 @@
 
 mod map;
 mod sealed;
+mod serialization;
 mod trait_impls;
-mod varint;
 
 use std::{fmt::Debug, marker::PhantomData};
 
