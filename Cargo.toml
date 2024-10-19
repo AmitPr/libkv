@@ -8,4 +8,3 @@ homepage.workspace = true
 
 [dependencies]
 disjoint_impls = "0.8.0"
-num-traits.workspace = true

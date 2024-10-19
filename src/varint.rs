@@ -1,5 +1,3 @@
-use num_traits::ToBytes;
-
 pub(crate) fn to_length_prefixed_bytes(data: impl AsRef<[u8]>) -> Vec<u8> {
     let data = data.as_ref();
     let mut buf = Vec::with_capacity(std::mem::size_of::<usize>() + data.len());
@@ -16,11 +14,4 @@ pub(crate) fn from_length_prefixed_bytes(bytes: &mut &[u8]) -> Option<Vec<u8>> {
         return None;
     }
     Some(bytes.to_vec())
-}
-
-pub(crate) fn to_lex_bytes<N>(num: N) -> Vec<u8>
-where
-    N: ToBytes<Bytes: AsRef<[u8]>>,
-{
-    num.to_be_bytes().as_ref().to_vec()
 }
