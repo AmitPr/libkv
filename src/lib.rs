@@ -75,15 +75,18 @@ trait NodeAccessor<N: Node> {
 
 disjoint_impls! {
     pub trait NodeValue {
+        type Leaf;
         type Value;
     }
 
     impl<N: Node<Category = Branch<M>>, M: Node + NodeValue> NodeValue for N {
         type Value = <M as NodeValue>::Value;
+        type Leaf = <M as NodeValue>::Leaf;
     }
 
     impl<N: Node<Category = Leaf<V>>, V> NodeValue for N {
         type Value = V;
+        type Leaf = N;
     }
 }
 
@@ -157,6 +160,17 @@ impl<K: Key, Inner: Node<Category = Branch<M>, KeySegment = K>, M: Node> Partial
             _marker: PhantomData,
         }
     }
+
+    // TODO: Implement this for the node itself, and find a better name.
+    fn full(
+        self,
+        key: impl Into<Inner::FullKey>,
+    ) -> PartialKey<CompoundKey<K, Inner::FullKey>, M::Leaf> {
+        PartialKey {
+            partial: CompoundKey(self.partial, key.into()),
+            _marker: PhantomData,
+        }
+    }
 }
 
 impl<K: Key, Inner> Key for PartialKey<K, Inner> {
@@ -216,14 +230,21 @@ mod tests {
         let map: Map<String, Item<()>> = Map {
             _marker: PhantomData,
         };
-        let acc: PartialKey<String, Item<()>> = map.key("foo");
+        let acc = map.key("foo");
         println!("{:?} -> {:?}", acc, acc.encode());
         let map: Map<String, Map<String, Item<String>>> = Map {
             _marker: PhantomData,
         };
-        let acc: PartialKey<String, Map<String, Item<String>>> = map.key("foo");
+        let acc = map.key("foo");
         println!("{:?} -> {:?}", acc.partial, acc.encode());
-        let acc: PartialKey<CompoundKey<String, String>, Item<String>> = acc.key("bar");
+        let acc = acc.key("bar");
+        println!("{:?} -> {:?}", acc, acc.encode());
+        let map: Map<String, Map<String, Map<String, Item<String>>>> = Map {
+            _marker: PhantomData,
+        };
+        let acc = map.key("foo");
+        println!("{:?} -> {:?}", acc.partial, acc.encode());
+        let acc = acc.full(("bar".to_string(), "baz".to_string()));
         println!("{:?} -> {:?}", acc, acc.encode());
     }
 }
