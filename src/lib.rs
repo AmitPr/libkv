@@ -7,7 +7,7 @@ mod sealed;
 mod serialization;
 mod trait_impls;
 
-pub use node::{Access, Branch, Item, Leaf, Map, Node, NodeValue, Accessor};
+pub use node::{Access, Accessor, Branch, Item, Leaf, Map, Node, NodeValue};
 
 use std::{fmt::Debug, marker::PhantomData};
 
@@ -36,18 +36,24 @@ mod tests {
         let x: <Map2 as Node>::FullKey = ("foo".to_string(), "bar".to_string()).into();
         println!("{:?}", x);
 
-        let map: Map<String, Item<()>> = Map::new();
-        let acc = map.key("foo");
-        println!("{:?} -> {:?}", acc, acc.encode());
-        let map: Map<String, Map<String, Item<String>>> = Map::new();
-        let acc = map.key("foo");
-        println!("{:?} -> {:?}", acc.partial, acc.encode());
-        let acc = acc.key("bar");
-        println!("{:?} -> {:?}", acc, acc.encode());
-        let map: Map<String, Map<String, Map<String, Item<String>>>> = Map::new();
-        let acc = map.key("foo");
-        println!("{:?} -> {:?}", acc.partial, acc.encode());
-        let acc = acc.full(("bar".to_string(), "baz".to_string()));
-        println!("{:?} -> {:?}", acc, acc.encode());
+        let map: Map2 = Map::new();
+        let access = map.key("foo").key("bar");
+
+        println!("{:?}", access);
+        println!("{:?}", access.get());
+
+        // let map: Map<String, Item<()>> = Map::new();
+        // let acc = map.key("foo");
+        // println!("{:?} -> {:?}", acc, acc.encode());
+        // let map: Map<String, Map<String, Item<String>>> = Map::new();
+        // let acc = map.key("foo");
+        // println!("{:?} -> {:?}", acc.partial, acc.encode());
+        // let acc = acc.key("bar");
+        // println!("{:?} -> {:?}", acc, acc.encode());
+        // let map: Map<String, Map<String, Map<String, Item<String>>>> = Map::new();
+        // let acc = map.key("foo");
+        // println!("{:?} -> {:?}", acc.partial, acc.encode());
+        // let acc = acc.full(("bar".to_string(), "baz".to_string()));
+        // println!("{:?} -> {:?}", acc, acc.encode());
     }
 }

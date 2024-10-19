@@ -6,22 +6,12 @@ use crate::key::{CompoundKey, Key};
 
 use super::{Branch, Leaf, Node};
 
-disjoint_impls! {
-    pub trait Access: Node {
-        type Inner;
-        fn key(&self, key: impl Into<Self::KeySegment>) -> Accessor<Self::KeySegment, Self::Inner> {
-            Accessor {
-                partial: key.into(),
-                _marker: PhantomData,
-            }
-        }
-    }
-    impl<N: Node<Category = Branch<M>>, M: Node> Access for N {
-        type Inner = M;
-    }
-    impl<N: Node<Category = Leaf<V>>, V> Access for N {
-        type Inner = N;
-    }
+pub trait AccessorT<N: Node, K: Key> {}
+
+pub trait Access<N: Node> {
+    type Accessor: AccessorT<N, N::KeySegment>;
+    type Inner;
+    fn access(&self) -> Self::Accessor;
 }
 
 /*
