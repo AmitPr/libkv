@@ -1,10 +1,10 @@
 [package]
 name = "libkv"
-version.workspace = true
-authors.workspace = true
-edition.workspace = true
-repository.workspace = true
-homepage.workspace = true
+version = "0.1.0"
+authors = ["Amit Prasad <mail@amitprasad.dev>"]
+edition = "2021"
+repository = "https://github.com/AmitPr/libkv"
+license = "MIT"
 
 [dependencies]
 disjoint_impls = "0.8.0"
