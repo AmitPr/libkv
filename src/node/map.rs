@@ -2,7 +2,7 @@ use std::marker::PhantomData;
 
 use crate::key::{CompoundKey, Key};
 
-use super::{item::Item, AccessorT, Branch, Node};
+use super::{item::Item, Branch, Node};
 
 /// An Iterable Map built atop a KV store
 #[derive(Debug)]

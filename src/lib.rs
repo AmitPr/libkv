@@ -7,7 +7,7 @@ mod sealed;
 mod serialization;
 mod trait_impls;
 
-pub use node::{Access, Accessor, Branch, Item, Leaf, Map, Node, NodeValue};
+pub use node::{Branch, Item, Leaf, Map, Node, NodeValue};
 
 use std::{fmt::Debug, marker::PhantomData};
 

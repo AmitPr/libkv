@@ -1,13 +1,7 @@
-mod access;
 mod item;
 mod map;
 mod nodetype;
-pub use {
-    access::{Access, Accessor, AccessorT},
-    item::Item,
-    map::Map,
-    nodetype::*,
-};
+pub use {item::Item, map::Map, nodetype::*};
 
 use crate::key::Key;
 use disjoint_impls::disjoint_impls;
