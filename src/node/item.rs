@@ -33,6 +33,7 @@ impl<V, P: Key> Node for Item<V, P> {
     type Category = Leaf<V>;
     type KeySegment = ();
     type FullKey = ();
+    type Prefix = P;
 
     type Prefixed<Pre: Key> = Item<V, Pre>;
     fn with_prefix<Pre: Key>(prefix: Pre) -> Self::Prefixed<Pre> {

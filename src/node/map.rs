@@ -2,7 +2,7 @@ use std::marker::PhantomData;
 
 use crate::key::{CompoundKey, Key};
 
-use super::{item::Item, Branch, Node};
+use super::{item::Item, Branch, NoPre, Node};
 
 /// An Iterable Map built atop a KV store
 #[derive(Debug)]
@@ -29,7 +29,7 @@ impl<K: Key, V: Node> Map<K, V> {
     }
 }
 
-impl<K: Key, V: Node, P: Key> Map<K, V, P> {
+impl<K: Key, V: Node<Prefix: NoPre>, P: Key> Map<K, V, P> {
     pub fn key(self, key: impl Into<K>) -> <V as Node>::Prefixed<CompoundKey<P, K>> {
         <V as Node>::with_prefix(CompoundKey::new(self.prefix, key.into()))
     }
@@ -39,7 +39,8 @@ impl<K: Key, V: Node<Category = Branch<M>>, M: Node, P: Key> Node for Map<K, V, 
     type Category = Branch<V>;
     type KeySegment = K;
     type FullKey = CompoundKey<K, V::KeySegment>;
-    type Prefixed<P: Key> = Map<K, V, P>;
+    type Prefixed<Pre: Key> = Map<K, V, Pre>;
+    type Prefix = P;
 
     fn with_prefix<Pre: Key>(prefix: Pre) -> Self::Prefixed<Pre> {
         Map {
@@ -55,6 +56,7 @@ impl<K: Key, T, P: Key> Node for Map<K, Item<T>, P> {
     type KeySegment = K;
     type FullKey = K;
     type Prefixed<Pre: Key> = Map<K, Item<T>, Pre>;
+    type Prefix = P;
 
     fn with_prefix<Pre: Key>(prefix: Pre) -> Self::Prefixed<Pre> {
         Map {
