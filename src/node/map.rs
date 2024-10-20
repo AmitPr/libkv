@@ -31,11 +31,11 @@ impl<K: Key, V: Node> Map<K, V> {
 
 impl<K: Key, V: Node, P: Key> Map<K, V, P> {
     pub fn key(self, key: impl Into<K>) -> <V as Node>::Prefixed<CompoundKey<P, K>> {
-        <V as Node>::with_prefix(CompoundKey(self.prefix, key.into()))
+        <V as Node>::with_prefix(CompoundKey::new(self.prefix, key.into()))
     }
 }
 
-impl<K: Key, V: Node<Category = Branch<M>>, M: Node, Prefix: Key> Node for Map<K, V, Prefix> {
+impl<K: Key, V: Node<Category = Branch<M>>, M: Node, P: Key> Node for Map<K, V, P> {
     type Category = Branch<V>;
     type KeySegment = K;
     type FullKey = CompoundKey<K, V::KeySegment>;

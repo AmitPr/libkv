@@ -37,7 +37,7 @@ macro_rules! compound_key_type {
 
 macro_rules! compound_key_into {
     ($f: tt, $($t:tt),+) => {
-        CompoundKey($f, compound_key_into!($($t),+))
+        CompoundKey::new($f, compound_key_into!($($t),+))
     };
     ($f: tt) => {
         $f
