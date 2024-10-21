@@ -26,6 +26,20 @@ impl Key for String {
     }
 }
 
+impl Key for usize {
+    // TODO: Error if decode not enough bytes.
+    type Error = ();
+    fn encode(&self) -> Vec<u8> {
+        self.to_be_bytes().to_vec()
+    }
+
+    fn decode(bytes: &mut &[u8]) -> Result<Self, Self::Error> {
+        let (int_bytes, rest) = bytes.split_at(std::mem::size_of::<usize>());
+        *bytes = rest;
+        Ok(usize::from_be_bytes(int_bytes.try_into().unwrap()))
+    }
+}
+
 macro_rules! compound_key_type {
     ($t:ident, $($r: ident),+) => {
         CompoundKey<$t, compound_key_type!($($r),+)>

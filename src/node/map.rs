@@ -12,7 +12,6 @@ pub struct Map<K: Key, V: Node, P: Key = ()> {
 }
 
 impl<K: Key, V: Node> Default for Map<K, V> {
-    #[inline]
     fn default() -> Self {
         Self::new()
     }
@@ -20,7 +19,6 @@ impl<K: Key, V: Node> Default for Map<K, V> {
 
 // Only enable ::new() for unprefixed Maps (i.e. root nodes).
 impl<K: Key, V: Node> Map<K, V> {
-    #[inline]
     pub const fn new() -> Self {
         Self {
             prefix: (),
@@ -48,27 +46,6 @@ impl<K: Key, V: Node, P: Key> Node for Map<K, V, P> {
             _marker: PhantomData,
         }
     }
-}
-
-// Flatten Key if the Value is an Item.
-// impl<K: Key, T, P: Key> Node for Map<K, Item<T>, P> {
-//     type Category = Branch<Item<T>>;
-//     type KeySegment = K;
-//     type FullKey = K;
-//     type Prefixed<Pre: Key> = Map<K, Item<T>, Pre>;
-//     type Prefix = P;
-
-//     fn with_prefix<Pre: Key>(prefix: Pre) -> Self::Prefixed<Pre> {
-//         Map {
-//             prefix,
-//             _marker: PhantomData,
-//         }
-//     }
-// }
-
-pub struct MapAccessor<N: Node, K: Key> {
-    pub partial: K,
-    _marker: PhantomData<N>,
 }
 
 #[cfg(test)]

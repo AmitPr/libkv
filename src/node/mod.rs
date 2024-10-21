@@ -1,6 +1,7 @@
 mod item;
 mod map;
 mod nodetype;
+mod vector;
 pub use {item::Item, map::Map, nodetype::*};
 
 use crate::{key::Key, UnitSeal};
@@ -21,10 +22,7 @@ pub trait Node: NodeValue + Sized {
     type Prefixed<P: Key>: Node;
     type Prefix: Key;
 
-    // TODO: Restrict with_prefix somehow.
-    // Effectively, this would prevent the user from accidentally
-    // discovering / overwriting via with_prefix during access.
-    // i.e., with_prefix shouldn't show in intellisense.
+    // TODO: Scary docs to make people not use this directly.
     fn with_prefix<Pre: Key>(prefix: Pre) -> Self::Prefixed<Pre>
     where
         Self::Prefix: NoPre;

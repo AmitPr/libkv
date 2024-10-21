@@ -56,4 +56,20 @@ mod tests {
         // let acc = acc.full(("bar".to_string(), "baz".to_string()));
         // println!("{:?} -> {:?}", acc, acc.encode());
     }
+
+    #[cfg(any())]
+    fn what_i_want() {
+        // A data structure that is a vector, keeping the current length of the vector at the
+        // base key for the structure.
+        // e.g.:
+        // /vector -> length
+        // /vector/0 -> item
+        // /vector/~ -> item
+        let structure: Vector<Item<String>> = Default::default();
+        let first: Option<String> = structure.key(0).get();
+        let len: usize = structure.len().get();
+        let pos: usize = structure.push("foo".to_string()); // Note: This also increments length!
+
+        // Thus, the Vector<> structure has to somehow intercept 
+    }
 }
