@@ -201,6 +201,44 @@ impl KeySerde for String {
     }
 }
 
+impl KeySerde for Vec<u8> {
+    type EncodeError = Infallible;
+    type DecodeError = KeyDeserializeError;
+
+    fn encode(&self) -> EncodeResult<Vec<u8>, Self> {
+        let len = self.len();
+        let mut encoded = Vec::with_capacity(len + std::mem::size_of::<usize>());
+        encoded.extend(len.encode()?);
+        encoded.extend(self);
+        Ok(encoded)
+    }
+
+    fn decode(bytes: &mut &[u8]) -> Result<Self, Self::DecodeError> {
+        let len = usize::decode(bytes)?;
+        let (data, rest) = bytes
+            .split_at_checked(len)
+            .ok_or(KeyDeserializeError::NotEnoughBytes)?;
+        *bytes = rest;
+        Ok(data.to_vec())
+    }
+
+    type PartialKey = Self;
+
+    fn partial_decode(bytes: &mut &[u8]) -> Result<Option<Self::PartialKey>, Self::DecodeError> {
+        // Only valid if we have no more bytes, or we have enough bytes to decode
+        let len = usize::partial_decode(bytes)?;
+        if let Some(len) = len {
+            let (data, rest) = bytes
+                .split_at_checked(len)
+                .ok_or(KeyDeserializeError::NotEnoughBytes)?;
+            *bytes = rest;
+            Ok(Some(data.to_vec()))
+        } else {
+            Ok(None)
+        }
+    }
+}
+
 impl<K: KeySerde> KeySerde for Option<K> {
     type EncodeError = K::EncodeError;
     type DecodeError = K::DecodeError;

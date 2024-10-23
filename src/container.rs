@@ -25,28 +25,11 @@ mod test {
     }
 
     #[test]
-    fn test_item() {
-        let mut storage: BTreeMap<Vec<u8>, Vec<u8>> = BTreeMap::new();
-        let item: Item<String, String, DisplayEncoding> = Item("foo".to_string(), PhantomData);
-
-        assert_eq!(item.may_load(&storage).unwrap(), None);
-        item.save(&mut storage, &"bar".to_string()).unwrap();
-        assert_eq!(item.may_load(&storage).unwrap(), Some("bar".to_string()));
-
-        let item2 = Item("foobar".to_string(), PhantomData);
-        assert_eq!(item2.may_load(&storage).unwrap(), None);
-        item2.save(&mut storage, &"baz".to_string()).unwrap();
-        assert_eq!(item2.may_load(&storage).unwrap(), Some("baz".to_string()));
-
-        println!("{:?}", storage);
-    }
-
-    #[test]
     fn test_map() {
-        let mut storage: BTreeMap<Vec<u8>, Vec<u8>> = BTreeMap::new();
-        let map: Map<String, Item<(), String, DisplayEncoding>, DisplayEncoding> = Map(PhantomData);
+        // let mut storage: BTreeMap<Vec<u8>, Vec<u8>> = BTreeMap::new();
+        // let map: Map<String, Item<(), String, DisplayEncoding>, DisplayEncoding> = Map(PhantomData);
 
-        let key = map.key("foo".to_string());
+        // let key = map.key("foo".to_string());
 
         // let key = CompoundKey::new("foo".to_string(), "bar".to_string());
         // assert_eq!(map.may_load(&storage, &key).unwrap(), None);

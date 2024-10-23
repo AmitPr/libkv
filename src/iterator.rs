@@ -86,7 +86,7 @@ disjoint_impls! {
         }
     }
 
-    impl<C: PartialToInner + Iterable + Container<ContainerType=Leaf<V>>, V> IterSkip for C {
+    impl<C: PartialToInner + Iterable + Container<ContainerType=Leaf<V, E>>, V, E> IterSkip for C {
         fn _do_should_skip(_key: &<Self::FullKey as KeySerde>::PartialKey) -> bool {
             false
         }

@@ -8,20 +8,21 @@ use crate::{
 
 use super::traits::{Container, Leaf};
 
-pub struct Item<K: KeySerde, T, E: Encoding>(pub K, pub PhantomData<(T, E)>);
-impl<T: Encodable<E> + Decodable<E>, E: Encoding, K: KeySerde> Container for Item<K, T, E> {
-    type ContainerType = Leaf<T>;
-    type Key = KeySegment<K, Self>;
+pub struct Item<'a, T, E: Encoding>(&'a [u8], pub PhantomData<(T, E)>);
+impl<'a, T: Encodable<E> + Decodable<E>, E: Encoding> Container for Item<'a, T, E> {
+    type ContainerType = Leaf<T, E>;
+    type Key = KeySegment<Vec<u8>, Self>;
     type FullKey = Self::Key;
     type Value = T;
     type Encoding = E;
 }
 
-impl<T: Encodable<E> + Decodable<E>, E: Encoding, K: KeySerde> Item<K, T, E> {
+impl<'a, T: Encodable<E> + Decodable<E>, E: Encoding> Item<'a, T, E> {
     pub fn may_load<S: Storage>(&self, storage: &S) -> Result<Option<T>, E::DecodeError> {
         // TODO: Error propagation should be nice for Key / Value serialization errrors.
         let key = self
             .0
+            .to_vec()
             .encode()
             .unwrap_or_else(|_| panic!("Failed to encode key"));
         let bytes = storage.get_raw(&key);
@@ -31,10 +32,36 @@ impl<T: Encodable<E> + Decodable<E>, E: Encoding, K: KeySerde> Item<K, T, E> {
     pub fn save<S: StorageMut>(&self, storage: &mut S, value: &T) -> Result<(), E::EncodeError> {
         let key = self
             .0
+            .to_vec()
             .encode()
             .unwrap_or_else(|_| panic!("Failed to encode key"));
         let value = value.encode()?;
         storage.set_raw(key, value);
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::mock::DisplayEncoding;
+
+    use super::*;
+
+    #[test]
+    fn test_item() {
+        const FOO: Item<String, DisplayEncoding> = Item(b"foo", PhantomData);
+        const FOOBAR: Item<String, DisplayEncoding> = Item(b"foobar", PhantomData);
+
+        let mut storage = std::collections::BTreeMap::new();
+
+        assert_eq!(FOO.may_load(&storage).unwrap(), None);
+        FOO.save(&mut storage, &"qux".to_string()).unwrap();
+        assert_eq!(FOO.may_load(&storage).unwrap(), Some("qux".to_string()));
+
+        assert_eq!(FOOBAR.may_load(&storage).unwrap(), None);
+        FOOBAR.save(&mut storage, &"baz".to_string()).unwrap();
+        assert_eq!(FOOBAR.may_load(&storage).unwrap(), Some("baz".to_string()));
+
+        println!("{storage:?}");
     }
 }

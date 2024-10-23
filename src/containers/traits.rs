@@ -19,12 +19,20 @@ mod sealed {
 }
 pub trait ContainerType: sealed::ContainerTypeSeal {}
 
-pub struct Leaf<V>(PhantomData<V>);
+pub struct Leaf<V, E>(PhantomData<(V, E)>);
 pub struct Branch<Inner>(PhantomData<Inner>);
-impl<V> sealed::ContainerTypeSeal for Leaf<V> {}
-impl<V> ContainerType for Leaf<V> {}
+impl<V, E> sealed::ContainerTypeSeal for Leaf<V, E> {}
+impl<V, E> ContainerType for Leaf<V, E> {}
 impl<Inner: Container> sealed::ContainerTypeSeal for Branch<Inner> {}
 impl<Inner: Container> ContainerType for Branch<Inner> {}
+
+impl<T: Encodable<E> + Decodable<E>, E: Encoding> Container for Leaf<T, E> {
+    type ContainerType = Leaf<T, E>;
+    type Key = KeySegment<(), Self>;
+    type FullKey = Self::Key;
+    type Value = T;
+    type Encoding = E;
+}
 
 /// Containers are compile-time types that lay out a specification for how to
 /// store and access data. They contain no data themselves, but simply define
@@ -65,7 +73,7 @@ disjoint_impls! {
         }
     }
 
-    impl<C: Container<ContainerType = Leaf<V>, FullKey = K>, V, K: KeySerde> PartialToInner for C {
+    impl<C: Container<ContainerType = Leaf<V, E>, FullKey = K>, V,E: Encoding, K: KeySerde> PartialToInner for C {
         type ChildKey = Infallible;
         fn partial_to_inner(_key: &K::PartialKey) -> Option<&Self::ChildKey> {
             None
