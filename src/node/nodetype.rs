@@ -6,7 +6,7 @@ use crate::NodeTypeSeal;
 pub trait NodeType: NodeTypeSeal {}
 
 pub struct Leaf<V>(PhantomData<V>);
-pub struct Branch<Inner: Node>(PhantomData<Inner>);
+pub struct Branch<Inner>(PhantomData<Inner>);
 impl<V> NodeTypeSeal for Leaf<V> {}
 impl<V> NodeType for Leaf<V> {}
 impl<Inner: Node> NodeTypeSeal for Branch<Inner> {}
