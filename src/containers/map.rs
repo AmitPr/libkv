@@ -1,6 +1,6 @@
 use std::marker::PhantomData;
 
-use crate::v2::{
+use crate::{
     key::{CompoundKey, KeySegment, KeySerde},
     serialization::{Decodable, Encodable, Encoding},
     storage::{Storage, StorageMut},

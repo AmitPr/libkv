@@ -3,8 +3,8 @@ mod test {
     use std::collections::BTreeMap;
     use std::marker::PhantomData;
 
-    use crate::v2::containers::{Item, Map};
-    use crate::v2::mock::DisplayEncoding;
+    use crate::containers::{Item, Map};
+    use crate::mock::DisplayEncoding;
 
     #[test]
     fn compiles() {

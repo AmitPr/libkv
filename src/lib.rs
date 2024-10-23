@@ -1,77 +1,62 @@
 #![allow(unused)]
 
-// mod key;
-// mod map;
-// mod node;
-// mod sealed;
-// mod serialization;
-// mod storage;
-// mod trait_impls;
-mod v2;
+mod container;
+mod containers;
+mod iterator;
+mod key;
+mod serialization;
+mod storage;
 
-// pub use node::{Branch, Item, Leaf, Map, Node, NodeValue};
+#[cfg(test)]
+mod mock;
+/*
+So here's the deal:
 
-// use std::{fmt::Debug, marker::PhantomData};
+Underlying KV stores are likely to give us two ways to iterate over KV pairs:
+1. .keys() -> an iterator over just keys
+2. .iter() -> an iterator over (key, value) pairs
 
-// use disjoint_impls::disjoint_impls;
+These may work fine! We still have key information, and can use the key, by
+stepping "backwards" through the nested containers to apply the correct
+filtering rules.
 
-// use key::{CompoundKey, Key};
-// use sealed::*;
-// #[cfg(test)]
-// mod tests {
-//     use super::*;
-//     use std::any::type_name;
+However, if the underlying store also provides
+3. .values() -> an iterator over just values
 
-//     #[test]
-//     fn test_map_compiles() {
-//         type Map1 = Map<String, Item<()>>;
-//         type Map2 = Map<String, Map<String, Item<()>>>;
+We're in trouble. We can't recover the associated key if we only have the value,
+and we can't, thus, filter out inline metadata that containers may have.
 
-//         println!("{}", type_name::<<Map1 as Node>::Category>());
-//         println!("{}", type_name::<<Map1 as Node>::KeySegment>());
-//         println!("{}", type_name::<<Map1 as NodeValue>::Value>());
+Possible solutions:
+1. Disallow .values()
+2. Via traits, mark containers that do not have inline metadata, and only
+   allow .values() on those containers.
 
-//         println!("{}", type_name::<<Map2 as Node>::Category>());
-//         println!("{}", type_name::<<Map2 as Node>::KeySegment>());
-//         println!("{}", type_name::<<Map2 as NodeValue>::Value>());
+For now? Let's just disallow .values()
 
-//         let x: <Map2 as Node>::FullKey = ("foo".to_string(), "bar".to_string()).into();
-//         println!("{:?}", x);
+Now, how does the iterator "structure" look like, from store to user invocation?
 
-//         let map: Map2 = Map::new();
-//         let access = map.key("foo").key("bar");
+For this structure:
+Container1<Container2<>>, where container 1 is wrapping container 2:
 
-//         println!("{:?}", access);
-//         println!("{:?}", access.get());
+Store:       .iter(low, high)  -> (key, value) pairs
+Container 1: .iter(store_iter) -> (maybe) filter certain pairs
+Container 2: .iter(store_iter) -> (maybe) filter certain pairs (... etc.)
 
-//         // let map: Map<String, Item<()>> = Map::new();
-//         // let acc = map.key("foo");
-//         // println!("{:?} -> {:?}", acc, acc.encode());
-//         // let map: Map<String, Map<String, Item<String>>> = Map::new();
-//         // let acc = map.key("foo");
-//         // println!("{:?} -> {:?}", acc.partial, acc.encode());
-//         // let acc = acc.key("bar");
-//         // println!("{:?} -> {:?}", acc, acc.encode());
-//         // let map: Map<String, Map<String, Map<String, Item<String>>>> = Map::new();
-//         // let acc = map.key("foo");
-//         // println!("{:?} -> {:?}", acc.partial, acc.encode());
-//         // let acc = acc.full(("bar".to_string(), "baz".to_string()));
-//         // println!("{:?} -> {:?}", acc, acc.encode());
-//     }
+First: Notice that the store iterator should be wrapped from the "top down":
+Container 1 gets the first opportunity to filter, then Container 2, etc.
 
-//     #[cfg(any())]
-//     fn what_i_want() {
-//         // A data structure that is a vector, keeping the current length of the vector at the
-//         // base key for the structure.
-//         // e.g.:
-//         // /vector -> length
-//         // /vector/0 -> item
-//         // /vector/~ -> item
-//         let structure: Vector<Item<String>> = Default::default();
-//         let first: Option<String> = structure.key(0).get();
-//         let len: usize = structure.len().get();
-//         let pos: usize = structure.push("foo".to_string()); // Note: This also increments length!
+Second: Container 1 may have (key, data) or (key, metadata) pairs fed into its
+iterator. We can't just deserialize as <T = data>, so we can either:
+1. Not deserialize at all, and have the iterator logic work solely via keys,
+    treating the values as opaque bytes.
+2. Do some fancy enum-based deserialization where we can detect metadata and
+    data, matching the enum. Notice this solves (3) from above, since we don't
+    use keys (and can thus iterate .values()), but we also run into the following
+    issue: We could have different types of metadata that serialize differntly.
+    e.g.: Container 1 may see (key, metadata1) and (key, metadata2) pairs, and
+    will fail to deserialize metadata2 as it is Container 2's type.
 
-//         // Thus, the Vector<> structure has to somehow intercept
-//     }
-// }
+So for now? I'm thinking (1), with some way to deserialize the data automatically
+into the value type once we finish the last wrapping iterator.
+
+*/

@@ -6,9 +6,9 @@ use std::{
 
 use disjoint_impls::disjoint_impls;
 
-use crate::v2::{key::AsInner, storage::encode_bound};
+use crate::{key::AsInner, storage::encode_bound};
 
-use crate::v2::{
+use crate::{
     key::{CompoundKey, DecodeResult, EncodeResult, Key, KeySegment, KeySerde},
     serialization::{Decodable, Encodable, Encoding},
     storage::{IterableStorage, RawKey, Storage, StorageMut},
