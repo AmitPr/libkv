@@ -7,16 +7,21 @@ use crate::v2::container::{Branch, Leaf, PartialToInner};
 use super::{
     container::Container,
     key::{DecodeResult, EncodeResult, Key, KeySerde},
+    serialization::{Decodable, Encoding},
     storage::{IterableStorage, RawKey},
 };
 
-pub struct ContainerIter<'a, C: Container + ?Sized> {
+pub struct ContainerIter<'a, C: Container + ?Sized, E: Encoding> {
     iter: super::storage::Iter<'a, (RawKey<C>, Vec<u8>)>,
-    _marker: PhantomData<C>,
+    _marker: PhantomData<E>,
 }
 
-impl<'a, C: IterSkip + Iterable> Iterator for ContainerIter<'a, C> {
+impl<'a, C: IterSkip + Iterable + Container<Value: Decodable<E>>, E: Encoding> Iterator
+    for ContainerIter<'a, C, E>
+{
     type Item = DecodeResult<(<C::FullKey as KeySerde>::PartialKey, C::Value), C::FullKey>;
+    // type Item =
+    //     Result<(<C::FullKey as KeySerde>::PartialKey, C::Value), Box<dyn std::error::Error>>;
 
     fn next(&mut self) -> Option<Self::Item> {
         /*
@@ -33,13 +38,17 @@ impl<'a, C: IterSkip + Iterable> Iterator for ContainerIter<'a, C> {
             let bytes = &mut raw.0.as_slice();
             let decoded = C::FullKey::partial_decode(bytes);
             match decoded {
-                Err(err) => return Some(Err(err)),
+                Err(err) => return Some(Err(err.into())),
                 Ok(Some(key)) => {
+                    // Check if this key should be skipped
                     if C::_do_should_skip(&key) {
                         continue;
                     }
 
-                    let val = todo!("Deserialize value, propagate properly.");
+                    // Deserialize the value
+                    let val = C::Value::decode(&val).unwrap_or_else(|err| {
+                        todo!("Handle error during val deserialization");
+                    });
                     return Some(Ok((key, val)));
                 }
                 Ok(None) => {
@@ -101,7 +110,8 @@ pub trait Iterable: Container<FullKey: KeySerde<PartialKey: Key<Container = Self
         storage: &'a S,
         low: Bound<<Self::FullKey as KeySerde>::PartialKey>,
         high: Bound<<Self::FullKey as KeySerde>::PartialKey>,
-    ) -> EncodeResult<ContainerIter<Self>, <Self::FullKey as KeySerde>::PartialKey> {
+    ) -> EncodeResult<ContainerIter<Self, Self::Encoding>, <Self::FullKey as KeySerde>::PartialKey>
+    {
         let base = storage.iter(low, high)?;
         let iter = ContainerIter {
             iter: base,

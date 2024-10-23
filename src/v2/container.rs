@@ -10,6 +10,7 @@ use crate::v2::{key::AsInner, storage::encode_bound};
 
 use super::{
     key::{CompoundKey, DecodeResult, EncodeResult, Key, KeySegment, KeySerde},
+    serialization::Encoding,
     storage::{IterableStorage, RawKey},
 };
 
@@ -36,11 +37,12 @@ pub trait Container {
     // /// The full key, composing of all the keys from this container to the leaf.
     type FullKey: Key<Container = Self>;
     type Value;
+    type Encoding: Encoding;
 }
 
-pub struct Map<K, V>(PhantomData<(K, V)>);
-pub struct Vector<T>(PhantomData<T>);
-pub struct Item<T>(PhantomData<T>);
+pub struct Map<K, V, E: Encoding>(PhantomData<(K, V, E)>);
+pub struct Vector<T, E: Encoding>(PhantomData<(T, E)>);
+pub struct Item<T, E: Encoding>(PhantomData<(T, E)>);
 
 disjoint_impls! {
     /// A private trait to convert a container's partial key to the partial key
@@ -73,38 +75,45 @@ disjoint_impls! {
     }
 }
 
-impl<K: KeySerde, V: Container> Container for Map<K, V> {
+impl<K: KeySerde, V: Container, E: Encoding> Container for Map<K, V, E> {
     type ContainerType = Branch<V>;
     type Key = KeySegment<K, Self>;
     type FullKey = CompoundKey<Self::Key, V::FullKey, Self>;
     type Value = V::Value;
+    type Encoding = E;
 }
 
-impl<T: Container> Container for Vector<T> {
+impl<T: Container, E: Encoding> Container for Vector<T, E> {
     type ContainerType = Branch<T>;
     type Key = KeySegment<usize, Self>;
     type FullKey = CompoundKey<Self::Key, T::FullKey, Self>;
     type Value = T::Value;
+    type Encoding = E;
 }
 
-impl<T> Container for Item<T> {
+impl<T, E: Encoding> Container for Item<T, E> {
     type ContainerType = Leaf<T>;
     type Key = KeySegment<(), Self>;
     type FullKey = Self::Key;
     type Value = T;
+    type Encoding = E;
 }
 
 #[cfg(test)]
 mod test {
+    use crate::v2::mock::DisplayEncoding;
+
     use super::*;
     #[test]
     fn compiles() {
-        type Map1 = Map<String, Item<()>>;
-        type Map2 = Map<String, Map<String, Item<()>>>;
-        type Vec1 = Vector<Item<()>>;
-        type Vec2 = Vector<Vector<Item<()>>>;
-        type VecMap = Vector<Map<String, Item<()>>>;
-        type Item1 = Item<()>;
+        type Map1 = Map<String, Item<(), DisplayEncoding>, DisplayEncoding>;
+        type Map2 =
+            Map<String, Map<String, Item<(), DisplayEncoding>, DisplayEncoding>, DisplayEncoding>;
+        type Vec1 = Vector<Item<(), DisplayEncoding>, DisplayEncoding>;
+        type Vec2 = Vector<Vector<Item<(), DisplayEncoding>, DisplayEncoding>, DisplayEncoding>;
+        type VecMap =
+            Vector<Map<String, Item<(), DisplayEncoding>, DisplayEncoding>, DisplayEncoding>;
+        type Item1 = Item<(), DisplayEncoding>;
 
         println!("{}", std::any::type_name::<Map1>());
         println!("{}", std::any::type_name::<<Map2 as Container>::FullKey>());

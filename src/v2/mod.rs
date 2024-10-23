@@ -4,6 +4,8 @@ mod key;
 mod serialization;
 mod storage;
 
+#[cfg(test)]
+mod mock;
 /*
 So here's the deal:
 

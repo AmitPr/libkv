@@ -220,12 +220,12 @@ impl<K: KeySerde> KeySerde for Option<K> {
 
 #[cfg(test)]
 mod test {
-    use crate::v2::container::Item;
+    use crate::v2::{container::Item, mock::DisplayEncoding};
 
     use super::*;
     #[test]
     fn compound_key_into() {
-        let key: CompoundKey<usize, String, Item<String>> =
+        let key: CompoundKey<usize, String, Item<String, DisplayEncoding>> =
             CompoundKey(1, "foo".to_string(), PhantomData);
 
         // let inner: String = key.into();
