@@ -1,7 +1,7 @@
 use std::{marker::PhantomData, ops::Bound};
 
 use super::{
-    container::Container,
+    containers::traits::Container,
     key::{EncodeResult, Key},
 };
 

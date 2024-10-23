@@ -2,10 +2,8 @@ use std::{marker::PhantomData, ops::Bound};
 
 use disjoint_impls::disjoint_impls;
 
-use crate::v2::container::{Branch, Leaf, PartialToInner};
-
 use super::{
-    container::Container,
+    containers::traits::{Branch, Container, Leaf, PartialToInner},
     key::{DecodeResult, EncodeResult, Key, KeySerde},
     serialization::{Decodable, Encoding},
     storage::{IterableStorage, RawKey},
@@ -38,7 +36,7 @@ impl<'a, C: IterSkip + Iterable + Container<Value: Decodable<E>>, E: Encoding> I
             let bytes = &mut raw.0.as_slice();
             let decoded = C::FullKey::partial_decode(bytes);
             match decoded {
-                Err(err) => return Some(Err(err.into())),
+                Err(err) => return Some(Err(err)),
                 Ok(Some(key)) => {
                     // Check if this key should be skipped
                     if C::_do_should_skip(&key) {

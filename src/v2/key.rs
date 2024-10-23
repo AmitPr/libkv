@@ -1,6 +1,6 @@
 use std::{convert::Infallible, marker::PhantomData};
 
-use super::container::Container;
+use super::containers::traits::Container;
 
 pub type EncodeResult<T, K> = Result<T, <K as KeySerde>::EncodeError>;
 pub type DecodeResult<T, K> = Result<T, <K as KeySerde>::DecodeError>;
@@ -222,19 +222,5 @@ impl<K: KeySerde> KeySerde for Option<K> {
     type PartialKey = K::PartialKey;
     fn partial_decode(bytes: &mut &[u8]) -> Result<Option<Self::PartialKey>, Self::DecodeError> {
         K::partial_decode(bytes)
-    }
-}
-
-#[cfg(test)]
-mod test {
-    use crate::v2::{container::Item, mock::DisplayEncoding};
-
-    use super::*;
-    #[test]
-    fn compound_key_into() {
-        // let key: CompoundKey<usize, String, Item<String, DisplayEncoding>> =
-        //     CompoundKey(1, "foo".to_string(), PhantomData);
-
-        // let inner: String = key.into();
     }
 }
