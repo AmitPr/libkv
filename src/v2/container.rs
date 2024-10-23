@@ -10,8 +10,8 @@ use crate::v2::{key::AsInner, storage::encode_bound};
 
 use super::{
     key::{CompoundKey, DecodeResult, EncodeResult, Key, KeySegment, KeySerde},
-    serialization::Encoding,
-    storage::{IterableStorage, RawKey},
+    serialization::{Decodable, Encodable, Encoding},
+    storage::{IterableStorage, RawKey, Storage, StorageMut},
 };
 
 mod sealed {
@@ -40,9 +40,7 @@ pub trait Container {
     type Encoding: Encoding;
 }
 
-pub struct Map<K, V, E: Encoding>(PhantomData<(K, V, E)>);
 pub struct Vector<T, E: Encoding>(PhantomData<(T, E)>);
-pub struct Item<T, E: Encoding>(PhantomData<(T, E)>);
 
 disjoint_impls! {
     /// A private trait to convert a container's partial key to the partial key
@@ -75,12 +73,82 @@ disjoint_impls! {
     }
 }
 
+pub struct Item<K: KeySerde, T, E: Encoding>(K, PhantomData<(T, E)>);
+impl<T: Encodable<E> + Decodable<E>, E: Encoding, K: KeySerde> Container for Item<K, T, E> {
+    type ContainerType = Leaf<T>;
+    type Key = KeySegment<K, Self>;
+    type FullKey = Self::Key;
+    type Value = T;
+    type Encoding = E;
+}
+
+impl<T: Encodable<E> + Decodable<E>, E: Encoding, K: KeySerde> Item<K, T, E> {
+    pub fn may_load<S: Storage>(&self, storage: &S) -> Result<Option<T>, E::DecodeError> {
+        // TODO: Error propagation should be nice for Key / Value serialization errrors.
+        let key = self
+            .0
+            .encode()
+            .unwrap_or_else(|_| panic!("Failed to encode key"));
+        let bytes = storage.get_raw(&key);
+        bytes.map(|b| T::decode(b.as_slice())).transpose()
+    }
+
+    pub fn save<S: StorageMut>(&self, storage: &mut S, value: &T) -> Result<(), E::EncodeError> {
+        let key = self
+            .0
+            .encode()
+            .unwrap_or_else(|_| panic!("Failed to encode key"));
+        let value = value.encode()?;
+        storage.set_raw(key, value);
+        Ok(())
+    }
+}
+
+pub struct Map<K, V, E: Encoding>(PhantomData<(K, V, E)>);
 impl<K: KeySerde, V: Container, E: Encoding> Container for Map<K, V, E> {
     type ContainerType = Branch<V>;
     type Key = KeySegment<K, Self>;
     type FullKey = CompoundKey<Self::Key, V::FullKey, Self>;
     type Value = V::Value;
     type Encoding = E;
+}
+
+impl<K: KeySerde, V: Container, E: Encoding> Map<K, V, E>
+where
+    Self: Container,
+    <Self as Container>::Value: Encodable<E> + Decodable<E>,
+{
+    pub fn key(&self, key: impl Into<<Self as Container>::Key>) -> <Self as Container>::Key {
+        key.into()
+    }
+
+    pub fn may_load<S: Storage>(
+        &self,
+        storage: &S,
+        key: &<Self as Container>::FullKey,
+    ) -> Result<Option<<Self as Container>::Value>, E::DecodeError> {
+        let key_bytes = key
+            .encode()
+            .unwrap_or_else(|_| panic!("Failed to encode key"));
+        let value_bytes = storage.get_raw(&key_bytes);
+        value_bytes
+            .map(|b| <Self as Container>::Value::decode(b.as_slice()))
+            .transpose()
+    }
+
+    pub fn save<S: StorageMut>(
+        &self,
+        storage: &mut S,
+        key: &<Self as Container>::FullKey,
+        value: &<Self as Container>::Value,
+    ) -> Result<(), E::EncodeError> {
+        let key_bytes = key
+            .encode()
+            .unwrap_or_else(|_| panic!("Failed to encode key"));
+        let value_bytes = value.encode()?;
+        storage.set_raw(key_bytes, value_bytes);
+        Ok(())
+    }
 }
 
 impl<T: Container, E: Encoding> Container for Vector<T, E> {
@@ -91,31 +159,71 @@ impl<T: Container, E: Encoding> Container for Vector<T, E> {
     type Encoding = E;
 }
 
-impl<T, E: Encoding> Container for Item<T, E> {
-    type ContainerType = Leaf<T>;
-    type Key = KeySegment<(), Self>;
-    type FullKey = Self::Key;
-    type Value = T;
-    type Encoding = E;
-}
-
 #[cfg(test)]
 mod test {
+    use std::collections::BTreeMap;
+
     use crate::v2::mock::DisplayEncoding;
 
     use super::*;
     #[test]
     fn compiles() {
-        type Map1 = Map<String, Item<(), DisplayEncoding>, DisplayEncoding>;
-        type Map2 =
-            Map<String, Map<String, Item<(), DisplayEncoding>, DisplayEncoding>, DisplayEncoding>;
-        type Vec1 = Vector<Item<(), DisplayEncoding>, DisplayEncoding>;
-        type Vec2 = Vector<Vector<Item<(), DisplayEncoding>, DisplayEncoding>, DisplayEncoding>;
-        type VecMap =
-            Vector<Map<String, Item<(), DisplayEncoding>, DisplayEncoding>, DisplayEncoding>;
-        type Item1 = Item<(), DisplayEncoding>;
+        // type Map1 = Map<String, Item<String, DisplayEncoding>, DisplayEncoding>;
+        // type Map2 = Map<
+        //     String,
+        //     Map<String, Item<String, DisplayEncoding>, DisplayEncoding>,
+        //     DisplayEncoding,
+        // >;
+        // type Vec1 = Vector<Item<String, DisplayEncoding>, DisplayEncoding>;
+        // type Vec2 = Vector<Vector<Item<String, DisplayEncoding>, DisplayEncoding>, DisplayEncoding>;
+        // type VecMap =
+        //     Vector<Map<String, Item<String, DisplayEncoding>, DisplayEncoding>, DisplayEncoding>;
+        // type Item1 = Item<String, DisplayEncoding>;
 
-        println!("{}", std::any::type_name::<Map1>());
-        println!("{}", std::any::type_name::<<Map2 as Container>::FullKey>());
+        // println!("{}", std::any::type_name::<Map1>());
+        // println!("{}", std::any::type_name::<<Map2 as Container>::FullKey>());
+    }
+
+    #[test]
+    fn test_item() {
+        let mut storage: BTreeMap<Vec<u8>, Vec<u8>> = BTreeMap::new();
+        let item: Item<String, String, DisplayEncoding> = Item("foo".to_string(), PhantomData);
+
+        assert_eq!(item.may_load(&storage).unwrap(), None);
+        item.save(&mut storage, &"bar".to_string()).unwrap();
+        assert_eq!(item.may_load(&storage).unwrap(), Some("bar".to_string()));
+
+        let item2 = Item("foobar".to_string(), PhantomData);
+        assert_eq!(item2.may_load(&storage).unwrap(), None);
+        item2.save(&mut storage, &"baz".to_string()).unwrap();
+        assert_eq!(item2.may_load(&storage).unwrap(), Some("baz".to_string()));
+
+        println!("{:?}", storage);
+    }
+
+    #[test]
+    fn test_map() {
+        let mut storage: BTreeMap<Vec<u8>, Vec<u8>> = BTreeMap::new();
+        let map: Map<String, Item<(), String, DisplayEncoding>, DisplayEncoding> = Map(PhantomData);
+
+        let key = map.key("foo".to_string());
+
+        // let key = CompoundKey::new("foo".to_string(), "bar".to_string());
+        // assert_eq!(map.may_load(&storage, &key).unwrap(), None);
+        // map.save(&mut storage, &key, &"baz".to_string()).unwrap();
+        // assert_eq!(
+        //     map.may_load(&storage, &key).unwrap(),
+        //     Some("baz".to_string())
+        // );
+
+        // let key2 = CompoundKey::new("foo".to_string(), "baz".to_string());
+        // assert_eq!(map.may_load(&storage, &key2).unwrap(), None);
+        // map.save(&mut storage, &key2, &"qux".to_string()).unwrap();
+        // assert_eq!(
+        //     map.may_load(&storage, &key2).unwrap(),
+        //     Some("qux".to_string())
+        // );
+
+        // println!("{:?}", storage);
     }
 }

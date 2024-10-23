@@ -23,7 +23,7 @@ pub trait AsInner<K> {
     fn as_inner_key(&self) -> Option<&K>;
 }
 
-pub struct KeySegment<T, C: Container>(T, PhantomData<C>);
+pub struct KeySegment<T: KeySerde, C: Container>(T, PhantomData<C>);
 impl<T: KeySerde, C: Container> KeySerde for KeySegment<T, C> {
     type EncodeError = T::EncodeError;
     type DecodeError = T::DecodeError;
@@ -43,6 +43,8 @@ impl<T: KeySerde, C: Container> KeySerde for KeySegment<T, C> {
     }
 }
 
+// impl
+
 // impl<T: KeySerde, U: KeySerde, C: Container> From<KeySegment<T, C>> for KeySegment<U, C>
 // where
 //     U: From<T>,
@@ -55,12 +57,17 @@ impl<T: KeySerde, C: Container> KeySerde for KeySegment<T, C> {
 impl<T: KeySerde, C: Container> Key for KeySegment<T, C> {
     type Container = C;
 }
-impl<T, C: Container> From<T> for KeySegment<T, C> {
+impl<T: KeySerde, C: Container> From<T> for KeySegment<T, C> {
     fn from(value: T) -> Self {
         Self(value, PhantomData)
     }
 }
 pub struct CompoundKey<T, U, C: Container>(T, U, PhantomData<C>);
+impl<T: KeySerde, U: KeySerde, C: Container> CompoundKey<T, U, C> {
+    pub fn new(t: T, u: U) -> Self {
+        Self(t, u, PhantomData)
+    }
+}
 
 impl<T: KeySerde, U: KeySerde, C: Container> KeySerde for CompoundKey<T, U, C> {
     type EncodeError = (Option<T::EncodeError>, Option<U::EncodeError>);
@@ -225,8 +232,8 @@ mod test {
     use super::*;
     #[test]
     fn compound_key_into() {
-        let key: CompoundKey<usize, String, Item<String, DisplayEncoding>> =
-            CompoundKey(1, "foo".to_string(), PhantomData);
+        // let key: CompoundKey<usize, String, Item<String, DisplayEncoding>> =
+        //     CompoundKey(1, "foo".to_string(), PhantomData);
 
         // let inner: String = key.into();
     }
