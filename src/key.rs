@@ -43,17 +43,6 @@ impl<T: KeySerde, C: Container> KeySerde for KeySegment<T, C> {
     }
 }
 
-// impl
-
-// impl<T: KeySerde, U: KeySerde, C: Container> From<KeySegment<T, C>> for KeySegment<U, C>
-// where
-//     U: From<T>,
-// {
-//     fn from(value: KeySegment<T, C>) -> Self {
-//         value.0.into()
-//     }
-// }
-
 impl<T: KeySerde, C: Container> Key for KeySegment<T, C> {
     type Container = C;
 }

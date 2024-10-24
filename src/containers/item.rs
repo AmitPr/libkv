@@ -1,4 +1,4 @@
-use std::marker::PhantomData;
+use std::{borrow::Cow, marker::PhantomData};
 
 use crate::{
     key::{KeySegment, KeySerde},
@@ -8,13 +8,22 @@ use crate::{
 
 use super::traits::{Container, Leaf};
 
-pub struct Item<'a, T, E: Encoding>(&'a [u8], pub PhantomData<(T, E)>);
+pub struct Item<'a, T, E: Encoding>(Cow<'a, [u8]>, pub PhantomData<(T, E)>);
 impl<'a, T: Encodable<E> + Decodable<E>, E: Encoding> Container for Item<'a, T, E> {
     type ContainerType = Leaf<T, E>;
     type Key = KeySegment<Vec<u8>, Self>;
     type FullKey = Self::Key;
     type Value = T;
     type Encoding = E;
+}
+impl<'a, T: Encodable<E> + Decodable<E>, E: Encoding> Item<'a, T, E> {
+    pub const fn from_bytes(bytes: &'a [u8]) -> Self {
+        Self(Cow::Borrowed(bytes), PhantomData)
+    }
+
+    pub const fn from_vec(bytes: Vec<u8>) -> Self {
+        Self(Cow::Owned(bytes), PhantomData)
+    }
 }
 
 impl<'a, T: Encodable<E> + Decodable<E>, E: Encoding> Item<'a, T, E> {
@@ -49,8 +58,8 @@ mod tests {
 
     #[test]
     fn test_item() {
-        const FOO: Item<String, DisplayEncoding> = Item(b"foo", PhantomData);
-        const FOOBAR: Item<String, DisplayEncoding> = Item(b"foobar", PhantomData);
+        const FOO: Item<String, DisplayEncoding> = Item::from_bytes(b"foo");
+        const FOOBAR: Item<String, DisplayEncoding> = Item::from_bytes(b"foobar");
 
         let mut storage = std::collections::BTreeMap::new();
 

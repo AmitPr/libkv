@@ -18,22 +18,6 @@ mod sealed {
     pub trait ContainerTypeSeal {}
 }
 pub trait ContainerType: sealed::ContainerTypeSeal {}
-
-pub struct Leaf<V, E>(PhantomData<(V, E)>);
-pub struct Branch<Inner>(PhantomData<Inner>);
-impl<V, E> sealed::ContainerTypeSeal for Leaf<V, E> {}
-impl<V, E> ContainerType for Leaf<V, E> {}
-impl<Inner: Container> sealed::ContainerTypeSeal for Branch<Inner> {}
-impl<Inner: Container> ContainerType for Branch<Inner> {}
-
-impl<T: Encodable<E> + Decodable<E>, E: Encoding> Container for Leaf<T, E> {
-    type ContainerType = Leaf<T, E>;
-    type Key = KeySegment<(), Self>;
-    type FullKey = Self::Key;
-    type Value = T;
-    type Encoding = E;
-}
-
 /// Containers are compile-time types that lay out a specification for how to
 /// store and access data. They contain no data themselves, but simply define
 /// access (lookup, iteration, etc.) and mutation (insertion, deletion,
@@ -46,6 +30,22 @@ pub trait Container {
     type FullKey: Key<Container = Self>;
     type Value;
     type Encoding: Encoding;
+}
+
+pub struct Leaf<V, E>(PhantomData<(V, E)>);
+impl<V, E> sealed::ContainerTypeSeal for Leaf<V, E> {}
+impl<V, E> ContainerType for Leaf<V, E> {}
+
+pub struct Branch<Inner>(PhantomData<Inner>);
+impl<Inner: Container> sealed::ContainerTypeSeal for Branch<Inner> {}
+impl<Inner: Container> ContainerType for Branch<Inner> {}
+
+impl<T: Encodable<E> + Decodable<E>, E: Encoding> Container for Leaf<T, E> {
+    type ContainerType = Leaf<T, E>;
+    type Key = KeySegment<(), Self>;
+    type FullKey = Self::Key;
+    type Value = T;
+    type Encoding = E;
 }
 
 pub struct Vector<T, E: Encoding>(PhantomData<(T, E)>);
