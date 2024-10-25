@@ -1,6 +1,6 @@
 use std::{borrow::Cow, marker::PhantomData, ops::Bound};
 
-use crate::serialization::{Codec, Encoding};
+use crate::serialization::{Codec, Decodable, Encoding};
 
 use super::{
     storage::{Iter, IterableStorage, Storage, StorageMut},
@@ -9,6 +9,8 @@ use super::{
 
 pub trait DataStructure {
     type Key: KeySerde;
+    type Enc: Encoding;
+    type Value: Codec<Self::Enc>;
     type DsType: sealed::ContainerType;
     fn with_prefix(prefix: Vec<u8>) -> Self
     where
@@ -47,34 +49,14 @@ impl<K: KeySerde> KeySerde for KeyType<K> {
     }
 }
 
-// pub struct Namespaced<'a, C: Container, N: KeySerde = Cow<'a, [u8]>>(
-//     KeyType<N>,
-//     PhantomData<(&'a N, C)>,
-// );
-// impl<'a, C: Container> DataStructure for Namespaced<'a, C> {
-//     type Key = C::Key;
-//     fn with_prefix(&self, mut prefix: Vec<u8>) -> Result<Self::Accessor, KeySerializeError> {
-//         prefix.extend(self.0.encode()?);
-//         Ok(C::with_prefix(prefix))
-//     }
-// }
-// impl<C: Container> Namespaced<'static, C> {
-//     pub const fn new(key: &'static [u8]) -> Self {
-//         Self(KeyType::Key(Cow::Borrowed(key)), PhantomData)
-//     }
-// }
-// impl<'a, C: Container, N: KeySerde> Namespaced<'a, C, N> {
-//     pub fn with_key(key: N) -> Self {
-//         Self(KeyType::Key(key), PhantomData)
-//     }
-// }
-
 pub struct Item<'a, V: Codec<Enc>, Enc: Encoding, K: KeySerde = Cow<'a, [u8]>>(
     KeyType<K>,
     PhantomData<(&'a K, V, Enc)>,
 );
 impl<'a, V: Codec<Enc>, Enc: Encoding, K: KeySerde> DataStructure for Item<'a, V, Enc, K> {
     type Key = K;
+    type Enc = Enc;
+    type Value = V;
     type DsType = Terminal;
 
     fn with_prefix(prefix: Vec<u8>) -> Self {
@@ -98,7 +80,6 @@ impl<'a, V: Codec<Enc>, Enc: Encoding, K: KeySerde> Item<'a, V, Enc, K> {
     }
 
     pub fn may_load<S: Storage>(&self, storage: &S) -> Result<Option<V>, StorageError<Enc>> {
-        // TODO: Use storage.get(key) once it uses KeySerde
         let bytes = storage.get(&self.0)?;
         let value = bytes.map(|b| V::decode(b.as_slice())).transpose();
         value.map_err(StorageError::ValueDeserialize)
@@ -119,6 +100,8 @@ pub struct Map<'a, K: KeySerde, V: DataStructure> {
 impl<'a, K: KeySerde, V: DataStructure> DataStructure for Map<'a, K, V> {
     type Key = (K, Option<V::Key>);
     type DsType = NonTerminal;
+    type Enc = V::Enc;
+    type Value = V::Value;
 
     fn with_prefix(prefix: Vec<u8>) -> Self {
         Self {
@@ -190,7 +173,7 @@ impl<'a, D: DataStructure> DsIter<'a, D> {
 }
 
 impl<'a, D: DataStructure> Iterator for DsIter<'a, D> {
-    type Item = Result<(D::Key, Vec<u8>), KeyDeserializeError>;
+    type Item = Result<(D::Key, D::Value), StorageError<D::Enc>>;
 
     fn next(&mut self) -> Option<Self::Item> {
         loop {
@@ -199,14 +182,17 @@ impl<'a, D: DataStructure> Iterator for DsIter<'a, D> {
                 return None;
             }
             let key_bytes = key_bytes.split_off(self.prefix.len());
-            println!("{:?} {:?}", key_bytes, val_bytes);
             let key = <D as DataStructure>::Key::decode(&mut key_bytes.as_slice())
                 .map(|k| (D::should_skip_key(&k), k));
 
             match key {
                 Ok((true, _)) => continue,
-                Ok((false, key)) => return Some(Ok((key, val_bytes))),
-                Err(e) => return Some(Err(e)),
+                Ok((false, key)) => {
+                    let val = <D::Value as Decodable<D::Enc>>::decode(&val_bytes)
+                        .map_err(StorageError::ValueDeserialize);
+                    return Some(val.map(|val| (key, val)));
+                }
+                Err(e) => return Some(Err(StorageError::KeyDeserialize(e))),
             }
         }
     }
@@ -279,7 +265,6 @@ mod test {
             .range(&storage, Bound::Unbounded, Bound::Unbounded)
             .unwrap();
         for item in iter {
-            println!("{:?}", item);
             if let Ok((key, value)) = item {
                 println!("{:?}: {:?}", key, value);
             } else {

@@ -30,6 +30,8 @@ pub trait IterableStorage: Storage {
         low: Bound<K>,
         high: Bound<K>,
     ) -> Result<Iter<Vec<u8>>, KeySerializeError>;
+
+    #[allow(clippy::type_complexity)]
     fn iter<K: KeySerde>(
         &self,
         low: Bound<K>,
