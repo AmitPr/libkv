@@ -8,3 +8,4 @@ license = "MIT"
 
 [dependencies]
 disjoint_impls = "0.8.0"
+thiserror = "1"

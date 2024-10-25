@@ -40,7 +40,7 @@ where
             .unwrap_or_else(|_| panic!("Failed to encode key"));
         let value_bytes = storage.get_raw(&key_bytes);
         value_bytes
-            .map(|b| <Self as Container>::Value::decode(b.as_slice()))
+            .map(|mut b| <Self as Container>::Value::decode(b.as_mut_slice()))
             .transpose()
     }
 

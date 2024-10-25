@@ -2,10 +2,11 @@ use std::{convert::Infallible, fmt::Display, str::FromStr};
 
 use super::serialization::{Decodable, Encodable, Encoding};
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct DisplayEncoding;
 impl Encoding for DisplayEncoding {
     type EncodeError = Infallible;
-    type DecodeError = Box<dyn std::error::Error>;
+    type DecodeError = Infallible;
 }
 
 impl<T: ToString + FromStr> Encodable<DisplayEncoding> for T {
@@ -15,8 +16,8 @@ impl<T: ToString + FromStr> Encodable<DisplayEncoding> for T {
 }
 
 impl<T: Display + FromStr<Err: Into<Box<dyn std::error::Error>>>> Decodable<DisplayEncoding> for T {
-    fn decode(bytes: &[u8]) -> Result<Self, Box<dyn std::error::Error>> {
+    fn decode(bytes: &[u8]) -> Result<Self, Infallible> {
         let s = std::str::from_utf8(bytes).unwrap();
-        Self::from_str(s).map_err(|e| e.into())
+        Ok(Self::from_str(s).unwrap_or_else(|_| panic!("Failed to parse {}", s)))
     }
 }
