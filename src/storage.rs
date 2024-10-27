@@ -1,6 +1,11 @@
 use super::{KeySerde, KeySerializeError};
 use std::ops::Bound;
 
+pub enum Order {
+    Ascending,
+    Descending,
+}
+
 pub trait Storage {
     fn get<K: KeySerde>(&self, key: &K) -> Result<Option<Vec<u8>>, KeySerializeError> {
         Ok(self.get_raw(&key.encode()?))
@@ -29,6 +34,7 @@ pub trait IterableStorage: Storage {
         &self,
         low: Bound<K>,
         high: Bound<K>,
+        order: Order,
     ) -> Result<Iter<Vec<u8>>, KeySerializeError>;
 
     #[allow(clippy::type_complexity)]
@@ -36,6 +42,7 @@ pub trait IterableStorage: Storage {
         &self,
         low: Bound<K>,
         high: Bound<K>,
+        order: Order,
     ) -> Result<Iter<(Vec<u8>, Vec<u8>)>, KeySerializeError>;
 }
 
@@ -81,26 +88,69 @@ macro_rules! encode_bound {
     };
 }
 
+fn is_empty_range(start: &Bound<Vec<u8>>, end: &Bound<Vec<u8>>) -> bool {
+    match (start, end) {
+        // If one bound is Included, then start must be strictly greater than end
+        // for the range to be empty.
+        (Bound::Included(start), Bound::Included(end))
+        | (Bound::Included(start), Bound::Excluded(end))
+        | (Bound::Excluded(start), Bound::Included(end)) => start > end,
+
+        // If both bounds are Excluded, then start must be greater than or equal to end
+        // for the range to be empty.
+        (Bound::Excluded(start), Bound::Excluded(end)) => start >= end,
+        // If either bound is Unbounded, then the range is not empty.
+        _ => false,
+    }
+}
+
+fn clone_kv((k, v): (&Vec<u8>, &Vec<u8>)) -> (Vec<u8>, Vec<u8>) {
+    (k.clone(), v.clone())
+}
+
+fn clone_k((k, _): (&Vec<u8>, &Vec<u8>)) -> Vec<u8> {
+    k.clone()
+}
+
 impl IterableStorage for std::collections::BTreeMap<Vec<u8>, Vec<u8>> {
     fn keys<K: KeySerde>(
         &self,
         low: Bound<K>,
         high: Bound<K>,
+        order: Order,
     ) -> Result<Iter<Vec<u8>>, KeySerializeError> {
         let low = encode_bound!(low);
         let high = encode_bound!(high);
+
+        // BTreeMap::range panics if low > high or low == high, with Bound::Excluded
+        if is_empty_range(&low, &high) {
+            return Ok(Box::new(std::iter::empty()));
+        }
+
         let iter = self.range((low, high));
-        Ok(Box::new(iter.map(|(k, _)| k.clone())))
+        match order {
+            Order::Ascending => Ok(Box::new(iter.map(clone_k))),
+            Order::Descending => Ok(Box::new(iter.rev().map(clone_k))),
+        }
     }
 
     fn iter<K: KeySerde>(
         &self,
         low: Bound<K>,
         high: Bound<K>,
+        order: Order,
     ) -> Result<Iter<(Vec<u8>, Vec<u8>)>, KeySerializeError> {
         let low = encode_bound!(low);
         let high = encode_bound!(high);
+        // BTreeMap::range panics if low > high or low == high, with Bound::Excluded
+        if is_empty_range(&low, &high) {
+            return Ok(Box::new(std::iter::empty()));
+        }
+
         let iter = self.range((low, high));
-        Ok(Box::new(iter.map(|(k, v)| (k.clone(), v.clone()))))
+        match order {
+            Order::Ascending => Ok(Box::new(iter.map(clone_kv))),
+            Order::Descending => Ok(Box::new(iter.rev().map(clone_kv))),
+        }
     }
 }

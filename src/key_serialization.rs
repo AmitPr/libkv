@@ -25,24 +25,24 @@ impl<K: KeySerde> KeySerde for KeyType<K> {
     }
 }
 
-impl KeySerde for usize {
-    fn encode(&self) -> Result<Vec<u8>, KeySerializeError> {
-        Ok(self.to_be_bytes().to_vec())
-    }
+// impl KeySerde for usize {
+//     fn encode(&self) -> Result<Vec<u8>, KeySerializeError> {
+//         Ok(self.to_be_bytes().to_vec())
+//     }
 
-    fn decode(bytes: &mut &[u8]) -> Result<Self, KeyDeserializeError> {
-        type IntBytes = [u8; std::mem::size_of::<usize>()];
-        let (int_bytes, rest): (&IntBytes, &[u8]) =
-            bytes
-                .split_first_chunk()
-                .ok_or(KeyDeserializeError::NotEnoughBytes(
-                    std::mem::size_of::<usize>(),
-                    bytes.len(),
-                ))?;
-        *bytes = rest;
-        Ok(usize::from_be_bytes(*int_bytes))
-    }
-}
+//     fn decode(bytes: &mut &[u8]) -> Result<Self, KeyDeserializeError> {
+//         type IntBytes = [u8; std::mem::size_of::<usize>()];
+//         let (int_bytes, rest): (&IntBytes, &[u8]) =
+//             bytes
+//                 .split_first_chunk()
+//                 .ok_or(KeyDeserializeError::NotEnoughBytes(
+//                     std::mem::size_of::<usize>(),
+//                     bytes.len(),
+//                 ))?;
+//         *bytes = rest;
+//         Ok(usize::from_be_bytes(*int_bytes))
+//     }
+// }
 
 impl KeySerde for () {
     fn encode(&self) -> Result<Vec<u8>, KeySerializeError> {
@@ -155,3 +155,114 @@ macro_rules! impl_tuple_keyserde {
 }
 
 impl_tuple_keyserde!(t T, u U, v V, w W, x X, y Y, z Z, a A, b B, c C, d D, e E);
+
+macro_rules! impl_uint_keyserde {
+    ($($t:ty),+) => {
+        $(
+            impl KeySerde for $t {
+                fn encode(&self) -> Result<Vec<u8>, KeySerializeError> {
+                    Ok(self.to_be_bytes().to_vec())
+                }
+
+                fn decode(bytes: &mut &[u8]) -> Result<Self, KeyDeserializeError> {
+                    type Bytes = [u8; std::mem::size_of::<$t>()];
+                    let (int_bytes, rest): (&Bytes, &[u8]) =
+                        bytes
+                            .split_first_chunk()
+                            .ok_or(KeyDeserializeError::NotEnoughBytes(
+                                std::mem::size_of::<$t>(),
+                                bytes.len(),
+                            ))?;
+                    *bytes = rest;
+                    Ok(<$t>::from_be_bytes(*int_bytes))
+                }
+            }
+        )+
+    };
+}
+
+impl_uint_keyserde!(u8, u16, u32, u64, u128, usize);
+
+macro_rules! impl_sint_keyserde {
+    ($($t:ty),+) => {
+        $(
+            impl KeySerde for $t {
+                fn encode(&self) -> Result<Vec<u8>, KeySerializeError> {
+                    // Map signed to unsigned
+                    // x = x ^ $t::MIN
+                    let x = self ^ <$t>::MIN;
+                    Ok(x.to_be_bytes().to_vec())
+                }
+
+                fn decode(bytes: &mut &[u8]) -> Result<Self, KeyDeserializeError> {
+                    type Bytes = [u8; std::mem::size_of::<$t>()];
+                    let (int_bytes, rest): (&Bytes, &[u8]) =
+                        bytes
+                            .split_first_chunk()
+                            .ok_or(KeyDeserializeError::NotEnoughBytes(
+                                std::mem::size_of::<$t>(),
+                                bytes.len(),
+                            ))?;
+                    *bytes = rest;
+                    // Map back to signed
+                    let x = <$t>::from_be_bytes(*int_bytes) ^ <$t>::MIN;
+                    Ok(x)
+                }
+            }
+        )+
+    };
+}
+impl_sint_keyserde!(i8, i16, i32, i64, i128, isize);
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn test_keyserde() {
+        let key = 42usize;
+        let encoded = key.encode().unwrap();
+        let decoded = usize::decode(&mut encoded.as_slice()).unwrap();
+        assert_eq!(key, decoded);
+
+        let key = 42u64;
+        let encoded = key.encode().unwrap();
+        let decoded = u64::decode(&mut encoded.as_slice()).unwrap();
+        assert_eq!(key, decoded);
+
+        let key = 42i64;
+        let encoded = key.encode().unwrap();
+        let decoded = i64::decode(&mut encoded.as_slice()).unwrap();
+        assert_eq!(key, decoded);
+
+        let key = -42i64;
+        let encoded = key.encode().unwrap();
+        let decoded = i64::decode(&mut encoded.as_slice()).unwrap();
+        assert_eq!(key, decoded);
+
+        let key = "hello".to_string();
+        let encoded = key.encode().unwrap();
+        let decoded = String::decode(&mut encoded.as_slice()).unwrap();
+        assert_eq!(key, decoded);
+
+        let key = vec![1, 2, 3, 4];
+        let encoded = key.encode().unwrap();
+        let decoded = Vec::<u8>::decode(&mut encoded.as_slice()).unwrap();
+        assert_eq!(key, decoded);
+
+        let key = (42usize, "hello".to_string());
+        let encoded = key.encode().unwrap();
+        let decoded = <(usize, String)>::decode(&mut encoded.as_slice()).unwrap();
+        assert_eq!(key, decoded);
+
+        let key = (42usize, "hello".to_string(), vec![1, 2, 3, 4]);
+        let encoded = key.encode().unwrap();
+        let decoded = <(usize, String, Vec<u8>)>::decode(&mut encoded.as_slice()).unwrap();
+        assert_eq!(key, decoded);
+
+        let key = (42usize, "hello".to_string(), vec![1, 2, 3, 4], 42u64);
+        let encoded = key.encode().unwrap();
+        let decoded = <(usize, String, Vec<u8>, u64)>::decode(&mut encoded.as_slice()).unwrap();
+        assert_eq!(key, decoded);
+    }
+}

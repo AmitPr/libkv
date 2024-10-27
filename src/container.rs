@@ -2,18 +2,45 @@ use std::marker::PhantomData;
 
 use crate::{Codec, Decodable, Encoding, Iter, KeySerde, StorageError};
 
+/// Trait representing an arbitrary data structure that can be used in a
+/// Key-Value store.
+///
+/// The trait requires the following associated types:
+/// - `Key`: The type of the key used to index the data structure.
+/// - `Enc`: The encoding used to serialize and deserialize the data structure.
+/// - `Value`: The value type, that can be (de)serialized using the `Enc` encoding.
+/// - `DsType`: A type that indicates whether the data structure is terminal or
+///     non-terminal.
+///
+/// The trait also requires the following methods:
+/// - `with_prefix`: A constructor that takes a byte-prefix, and returns a handle
+///    to the data structure with that prefix.
+/// - `should_skip_key`: A method that takes a key and returns whether the key
+///   should be skipped when iterating over the data structure.
 pub trait DataStructure {
+    /// The type of the key used to index the data structure.
     type Key: KeySerde;
+    /// The encoding used to serialize and deserialize the data structure.
     type Enc: Encoding;
+    /// The value type, that can be (de)serialized using the `Enc` encoding.
     type Value: Codec<Self::Enc>;
+    /// A type that indicates whether the data structure is terminal or non-terminal.
     type DsType: sealed::ContainerType;
+
+    /// Constructor that takes a byte-prefix, and returns a handle to the data structure
     fn with_prefix(prefix: Vec<u8>) -> Self
     where
         Self: Sized;
 
+    /// Returns whether the given key should be skipped when iterating over the data structure.
     fn should_skip_key(key: &Self::Key) -> bool;
 }
 
+/// A trait representing a data structure that is a container of other data structures.
+///
+/// Most data structures are non-terminal, meaning they contain other data structures.
+/// Since we represent actual values as the `Item` structure, even "simple" data structures
+/// like a Key-Value Map are considered non-terminal, and thus are marked as `Container`.
 pub trait Container: DataStructure<DsType = NonTerminal> {
     type Inner: DataStructure;
 }

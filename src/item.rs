@@ -46,6 +46,10 @@ impl<'a, V: Codec<Enc>, Enc: Encoding, K: KeySerde> Item<'a, V, Enc, K> {
         storage.set_raw(key, value);
         Ok(())
     }
+
+    pub fn delete<S: StorageMut>(&self, storage: &mut S) -> Result<(), StorageError<Enc>> {
+        Ok(storage.delete(&self.0)?)
+    }
 }
 
 #[cfg(test)]
@@ -72,5 +76,9 @@ mod test {
         item.save(&mut storage, &"qux".to_string()).unwrap();
         assert_eq!(ITEM.may_load(&storage), Ok(Some("baz".to_string())));
         assert_eq!(item.may_load(&storage), Ok(Some("qux".to_string())));
+
+        item.delete(&mut storage).unwrap();
+        assert_eq!(ITEM.may_load(&storage), Ok(Some("baz".to_string())));
+        assert_eq!(item.may_load(&storage), Ok(None));
     }
 }

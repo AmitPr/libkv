@@ -1,6 +1,8 @@
 use std::{borrow::Cow, marker::PhantomData, ops::Bound};
 
-use crate::{DataStructure, DsIter, IterableStorage, KeySerde, KeySerializeError, NonTerminal};
+use crate::{
+    DataStructure, DsIter, IterableStorage, KeySerde, KeySerializeError, NonTerminal, Order,
+};
 
 pub struct Map<'a, K: KeySerde, V: DataStructure> {
     prefix: Cow<'a, [u8]>,
@@ -34,14 +36,14 @@ impl<K: KeySerde, V: DataStructure> Map<'static, K, V> {
 }
 
 impl<'a, K: KeySerde, V: DataStructure> Map<'a, K, V> {
-    fn key(&self, key: K) -> Result<Vec<u8>, KeySerializeError> {
+    fn key(&self, key: &K) -> Result<Vec<u8>, KeySerializeError> {
         let encoded = key.encode()?;
         let full = [self.prefix.as_ref(), &encoded].concat();
 
         Ok(full)
     }
     pub fn at(&self, key: impl Into<K>) -> Result<V, KeySerializeError> {
-        Ok(V::with_prefix(self.key(key.into())?))
+        Ok(V::with_prefix(self.key(&key.into())?))
     }
 
     pub fn range<'b, S: IterableStorage>(
@@ -49,18 +51,19 @@ impl<'a, K: KeySerde, V: DataStructure> Map<'a, K, V> {
         storage: &'b S,
         start: Bound<K>,
         end: Bound<K>,
+        order: Order,
     ) -> Result<DsIter<'b, Self>, KeySerializeError> {
         let start = match start {
-            Bound::Included(k) => Bound::Included(self.key(k)?),
-            Bound::Excluded(k) => Bound::Excluded(self.key(k)?),
+            Bound::Included(k) => Bound::Included(self.key(&k)?),
+            Bound::Excluded(k) => Bound::Excluded(self.key(&k)?),
             Bound::Unbounded => Bound::Unbounded,
         };
         let end = match end {
-            Bound::Included(k) => Bound::Included(self.key(k)?),
-            Bound::Excluded(k) => Bound::Excluded(self.key(k)?),
+            Bound::Included(k) => Bound::Included(self.key(&k)?),
+            Bound::Excluded(k) => Bound::Excluded(self.key(&k)?),
             Bound::Unbounded => Bound::Unbounded,
         };
-        let iter = storage.iter(start, end)?;
+        let iter = storage.iter(start, end, order)?;
         Ok(DsIter::new(self.prefix.to_vec(), iter))
     }
 }
@@ -111,7 +114,12 @@ mod test {
         }
 
         let iter = MAP
-            .range(&storage, Bound::Unbounded, Bound::Unbounded)
+            .range(
+                &storage,
+                Bound::Unbounded,
+                Bound::Unbounded,
+                Order::Ascending,
+            )
             .unwrap();
         for item in iter {
             if let Ok((key, value)) = item {
