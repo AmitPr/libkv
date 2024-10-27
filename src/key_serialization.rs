@@ -5,6 +5,26 @@ pub trait KeySerde: Sized {
     fn decode(bytes: &mut &[u8]) -> Result<Self, KeyDeserializeError>;
 }
 
+/// Represents a key that can be either a pre-serialized byte sequence or a key of type K.
+pub enum KeyType<K: KeySerde> {
+    /// A serialized key (of assumed type K).
+    Raw(Vec<u8>),
+    /// A key of type K, pre-serialization.
+    Key(K),
+}
+impl<K: KeySerde> KeySerde for KeyType<K> {
+    fn encode(&self) -> Result<Vec<u8>, KeySerializeError> {
+        match self {
+            Self::Raw(key) => Ok(key.clone()),
+            Self::Key(key) => key.encode(),
+        }
+    }
+
+    fn decode(bytes: &mut &[u8]) -> Result<Self, KeyDeserializeError> {
+        K::decode(bytes).map(Self::Key)
+    }
+}
+
 impl KeySerde for usize {
     fn encode(&self) -> Result<Vec<u8>, KeySerializeError> {
         Ok(self.to_be_bytes().to_vec())

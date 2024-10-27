@@ -1,10 +1,18 @@
-pub mod container;
-pub mod error;
-pub mod key_serialization;
-pub mod serialization;
-pub mod storage;
+mod container;
+mod error;
+mod item;
+mod key_serialization;
+mod map;
+mod serialization;
+mod storage;
 
+pub use container::{Container, DataStructure, DsIter, NonTerminal, Terminal};
 pub use error::{KeyDeserializeError, KeySerializeError, StorageError};
-pub use key_serialization::KeySerde;
+pub use item::Item;
+pub use key_serialization::{KeySerde, KeyType};
+pub use map::Map;
+pub use serialization::{Codec, Decodable, Encodable, Encoding};
+pub use storage::{Iter, IterableStorage, Storage, StorageMut};
+
 #[cfg(test)]
-mod mock;
+pub mod mock;
