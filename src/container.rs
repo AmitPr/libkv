@@ -80,7 +80,7 @@ impl<'a, D: DataStructure> Iterator for DsIter<'a, D> {
                 return None;
             }
             let key_bytes = key_bytes.split_off(self.prefix.len());
-            let key = <D as DataStructure>::Key::decode(&mut key_bytes.as_slice())
+            let key = <<D as DataStructure>::Key as KeySerde>::decode(&mut key_bytes.as_slice())
                 .map(|k| (D::should_skip_key(&k), k));
 
             match key {

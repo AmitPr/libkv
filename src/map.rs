@@ -42,6 +42,11 @@ impl<'a, K: KeySerde, V: DataStructure> Map<'a, K, V> {
 
         Ok(full)
     }
+
+    pub fn prefix(&self) -> &[u8] {
+        self.prefix.as_ref()
+    }
+
     pub fn at(&self, key: impl Into<K>) -> Result<V, KeySerializeError> {
         Ok(V::with_prefix(self.key(&key.into())?))
     }
