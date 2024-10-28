@@ -8,6 +8,7 @@ pub struct Item<'a, V: Codec<Enc>, Enc: Encoding, K: KeySerde = Cow<'a, [u8]>>(
     KeyType<K>,
     PhantomData<(&'a K, V, Enc)>,
 );
+
 impl<'a, V: Codec<Enc>, Enc: Encoding, K: KeySerde> DataStructure for Item<'a, V, Enc, K> {
     type Key = K;
     type Enc = Enc;
