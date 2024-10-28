@@ -7,5 +7,11 @@ repository = "https://github.com/AmitPr/libkv"
 license = "MIT"
 
 [dependencies]
-disjoint_impls = "0.8.0"
 thiserror = "1"
+serde = { version = "1.0.213", optional = true }
+borsh = { version = "1.5.1", optional = true }
+
+[features]
+default = []
+serde = ["dep:serde"]
+borsh = ["dep:borsh"]
