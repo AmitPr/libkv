@@ -5,6 +5,7 @@ authors = ["Amit Prasad <mail@amitprasad.dev>"]
 edition = "2021"
 repository = "https://github.com/AmitPr/libkv"
 license = "MIT"
+description = "A library for building data structures atop key-value stores."
 
 [dependencies]
 thiserror = "1"
