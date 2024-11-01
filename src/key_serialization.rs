@@ -25,25 +25,6 @@ impl<K: KeySerde> KeySerde for KeyType<K> {
     }
 }
 
-// impl KeySerde for usize {
-//     fn encode(&self) -> Result<Vec<u8>, KeySerializeError> {
-//         Ok(self.to_be_bytes().to_vec())
-//     }
-
-//     fn decode(bytes: &mut &[u8]) -> Result<Self, KeyDeserializeError> {
-//         type IntBytes = [u8; std::mem::size_of::<usize>()];
-//         let (int_bytes, rest): (&IntBytes, &[u8]) =
-//             bytes
-//                 .split_first_chunk()
-//                 .ok_or(KeyDeserializeError::NotEnoughBytes(
-//                     std::mem::size_of::<usize>(),
-//                     bytes.len(),
-//                 ))?;
-//         *bytes = rest;
-//         Ok(usize::from_be_bytes(*int_bytes))
-//     }
-// }
-
 impl KeySerde for () {
     fn encode(&self) -> Result<Vec<u8>, KeySerializeError> {
         Ok(vec![])
@@ -56,14 +37,15 @@ impl KeySerde for () {
 
 impl KeySerde for String {
     fn encode(&self) -> Result<Vec<u8>, KeySerializeError> {
-        let mut encoded = Vec::with_capacity(self.len() + std::mem::size_of::<usize>());
-        encoded.extend(self.len().encode()?);
+        let length = encode_length(self.len())?;
+        let mut encoded = Vec::with_capacity(self.len() + length.len());
+        encoded.extend(length);
         encoded.extend(self.as_bytes());
         Ok(encoded)
     }
 
     fn decode(bytes: &mut &[u8]) -> Result<Self, KeyDeserializeError> {
-        let len = usize::decode(bytes)?;
+        let len = decode_length(bytes)?;
         let (data, rest) = bytes
             .split_at_checked(len)
             .ok_or(KeyDeserializeError::NotEnoughBytes(len, bytes.len()))?;
@@ -74,14 +56,15 @@ impl KeySerde for String {
 
 impl KeySerde for std::borrow::Cow<'_, [u8]> {
     fn encode(&self) -> Result<Vec<u8>, KeySerializeError> {
-        let mut encoded = Vec::with_capacity(self.len() + std::mem::size_of::<usize>());
-        encoded.extend(self.len().encode()?);
+        let length = encode_length(self.len())?;
+        let mut encoded = Vec::with_capacity(self.len() + length.len());
+        encoded.extend(length);
         encoded.extend(self.iter());
         Ok(encoded)
     }
 
     fn decode(bytes: &mut &[u8]) -> Result<Self, KeyDeserializeError> {
-        let len = usize::decode(bytes)?;
+        let len = decode_length(bytes)?;
         let (data, rest) = bytes
             .split_at_checked(len)
             .ok_or(KeyDeserializeError::NotEnoughBytes(len, bytes.len()))?;
@@ -92,15 +75,15 @@ impl KeySerde for std::borrow::Cow<'_, [u8]> {
 
 impl KeySerde for Vec<u8> {
     fn encode(&self) -> Result<Vec<u8>, KeySerializeError> {
-        let len = self.len();
-        let mut encoded = Vec::with_capacity(len + std::mem::size_of::<usize>());
-        encoded.extend(len.encode()?);
+        let length = encode_length(self.len())?;
+        let mut encoded = Vec::with_capacity(self.len() + length.len());
+        encoded.extend(length);
         encoded.extend(self);
         Ok(encoded)
     }
 
     fn decode(bytes: &mut &[u8]) -> Result<Self, KeyDeserializeError> {
-        let len = usize::decode(bytes)?;
+        let len = decode_length(bytes)?;
         let (data, rest) = bytes
             .split_at_checked(len)
             .ok_or(KeyDeserializeError::NotEnoughBytes(len, bytes.len()))?;
@@ -214,9 +197,70 @@ macro_rules! impl_sint_keyserde {
 }
 impl_sint_keyserde!(i8, i16, i32, i64, i128, isize);
 
+/// Encodes `len` as a compact integer with the format:
+///
+/// [0-4 bits]: length of compact representation, in bytes (0-8), > 8 is invalid
+/// [5-7 bits]: 4 high bits of len
+/// [8-15 bits]: 8 next bits of len
+/// ...
+fn encode_length(mut len: usize) -> Result<Vec<u8>, KeySerializeError> {
+    if len <= 0xf {
+        return Ok(vec![len as u8]);
+    }
+    // Get position of highest set bit
+    let high = len.ilog2() as usize;
+    let num_bytes = (high + 4) / 8;
+    // debug_assert!(num_bytes <= 0b1111, "usize is too large to encode");
+    let mut bytes = vec![0; num_bytes + 1];
+    let mut idx = num_bytes;
+    while idx > 0 {
+        bytes[idx] = (len & 0xFF) as u8;
+        len >>= 8;
+        idx -= 1;
+    }
+    bytes[0] = (num_bytes << 4) as u8 | (len & 0x0F) as u8;
+    Ok(bytes)
+}
+
+/// Decodes a compact integer from the format used in `encode_length`.
+fn decode_length(bytes: &mut &[u8]) -> Result<usize, KeyDeserializeError> {
+    let first = bytes
+        .first()
+        .ok_or(KeyDeserializeError::NotEnoughBytes(1, bytes.len()))?;
+
+    let mut num_bytes = *first as usize >> 4;
+    if bytes.len() < num_bytes {
+        return Err(KeyDeserializeError::NotEnoughBytes(num_bytes, bytes.len()));
+    }
+    let mut decoded = (*first & 0x0F) as usize;
+
+    let mut idx = 1;
+    while num_bytes > 0 {
+        decoded <<= 8;
+        decoded |= *bytes.get(idx).unwrap() as usize;
+        num_bytes -= 1;
+        idx += 1;
+    }
+
+    *bytes = &bytes[idx..];
+    Ok(decoded)
+}
+
 #[cfg(test)]
 mod test {
     use super::*;
+
+    #[test]
+    fn test_length_serde() {
+        let test_cases = vec![
+            0, 1, 15, 16, 255, 256, 257, 1024, 1025, 1026, 4095, 4096, 4097, 65535, 65536, 65537,
+        ];
+        for len in test_cases {
+            let encoded = encode_length(len).unwrap();
+            let decoded = decode_length(&mut encoded.as_slice()).unwrap();
+            assert_eq!(len, decoded);
+        }
+    }
 
     #[test]
     fn test_keyserde() {

@@ -69,24 +69,26 @@ impl<T: KeySerde> Decodable<KeyEncoding> for T {
 // }
 
 #[cfg(feature = "borsh")]
-pub(crate) mod borsh {
+pub(crate) mod _borsh {
+    use super::*;
+
     #[derive(Debug, Clone, Copy, PartialEq, Eq)]
     pub struct BorshEncoding;
 
     impl Encoding for BorshEncoding {
-        type EncodeError = borsh::io::Error;
-        type DecodeError = borsh::io::Error;
+        type EncodeError = ::borsh::io::Error;
+        type DecodeError = ::borsh::io::Error;
     }
 
-    impl<T: borsh::ser::BorshSerialize> Encodable<BorshEncoding> for T {
-        fn encode(&self) -> Result<Vec<u8>, borsh::io::Error> {
-            borsh::to_vec(self)
+    impl<T: ::borsh::ser::BorshSerialize> Encodable<BorshEncoding> for T {
+        fn encode(&self) -> Result<Vec<u8>, ::borsh::io::Error> {
+            ::borsh::to_vec(self)
         }
     }
 
-    impl<T: borsh::de::BorshDeserialize> Decodable<BorshEncoding> for T {
-        fn decode(bytes: &[u8]) -> Result<Self, borsh::io::Error> {
-            borsh::from_slice(bytes)
+    impl<T: ::borsh::de::BorshDeserialize> Decodable<BorshEncoding> for T {
+        fn decode(bytes: &[u8]) -> Result<Self, ::borsh::io::Error> {
+            ::borsh::from_slice(bytes)
         }
     }
 }
