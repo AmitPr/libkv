@@ -1,14 +1,16 @@
 use crate::{
-    Codec, Encoding, Item, IterableStorage, KeySerde, Map, Order, StorageError, StorageMut,
+    Codec, Encoding, Item, IterableStorage, KeyEncoding, Map, Order, StorageError, StorageMut,
 };
 use std::ops::Bound;
 
 // Single value per priority queue
-pub struct PriorityQueue<'a, K: KeySerde + Ord + Clone, V: Codec<Enc>, Enc: Encoding> {
+pub struct PriorityQueue<'a, K: Codec<KeyEncoding> + Ord + Clone, V: Codec<Enc>, Enc: Encoding> {
     map: Map<'a, K, Item<'a, V, Enc>>,
 }
 
-impl<'a, K: KeySerde + Ord + Clone, V: Codec<Enc>, Enc: Encoding> PriorityQueue<'a, K, V, Enc> {
+impl<'a, K: Codec<KeyEncoding> + Ord + Clone, V: Codec<Enc>, Enc: Encoding>
+    PriorityQueue<'a, K, V, Enc>
+{
     pub const fn new(prefix: &'static [u8]) -> Self {
         Self {
             map: Map::new(prefix),

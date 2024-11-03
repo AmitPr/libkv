@@ -7,8 +7,8 @@ mod structures;
 
 pub use container::{Container, DataStructure, DsIter, NonTerminal, Terminal};
 pub use error::{KeyDeserializeError, KeySerializeError, StorageError};
-pub use key_serialization::{KeySerde, KeyType};
-pub use serialization::{Codec, Decodable, Encodable, Encoding};
+pub use key_serialization::{KeyEncoding, KeyType};
+pub use serialization::{decode, encode, Codec, Decodable, Encodable, Encoding};
 pub use storage::{Iter, IterableStorage, Order, Storage, StorageMut};
 pub use structures::*;
 

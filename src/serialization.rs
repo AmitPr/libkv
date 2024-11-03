@@ -1,18 +1,19 @@
 use std::error::Error;
 
-use crate::{KeyDeserializeError, KeySerde, KeySerializeError};
-
 pub trait Encoding {
     type EncodeError: Error;
     type DecodeError: Error;
 }
 
 pub trait Encodable<E: Encoding> {
+    /// Try to encode this value to bytes.
     fn encode(&self) -> Result<Vec<u8>, E::EncodeError>;
 }
 
 pub trait Decodable<E: Encoding>: Sized {
-    fn decode(bytes: &[u8]) -> Result<Self, E::DecodeError>;
+    /// Try to decode this value from a byte slice, advancing the slice to reflect the number of
+    /// bytes consumed.
+    fn decode(bytes: &mut &[u8]) -> Result<Self, E::DecodeError>;
 }
 
 /// Sugar for implementing both `Encodable` and `Decodable` for a given encoding
@@ -20,24 +21,15 @@ pub trait Decodable<E: Encoding>: Sized {
 pub trait Codec<E: Encoding>: Encodable<E> + Decodable<E> {}
 impl<T: Encodable<E> + Decodable<E>, E: Encoding> Codec<E> for T {}
 
-/// Encoding that simply uses the KeySerde trait for serialization and deserialization.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct KeyEncoding;
-impl Encoding for KeyEncoding {
-    type EncodeError = KeySerializeError;
-    type DecodeError = KeyDeserializeError;
+/// Encode a value using the given encoding, sugar/helper for [`Encodable::encode`]
+pub fn encode<E: Encoding>(value: &impl Encodable<E>) -> Result<Vec<u8>, E::EncodeError> {
+    value.encode()
 }
 
-impl<T: KeySerde> Encodable<KeyEncoding> for T {
-    fn encode(&self) -> Result<Vec<u8>, KeySerializeError> {
-        self.encode()
-    }
-}
-
-impl<T: KeySerde> Decodable<KeyEncoding> for T {
-    fn decode(mut bytes: &[u8]) -> Result<Self, KeyDeserializeError> {
-        T::decode(&mut bytes)
-    }
+/// Decode a value using the given encoding, sugar/helper for [`Decodable::decode`]
+pub fn decode<T: Decodable<E>, E: Encoding>(bytes: &[u8]) -> Result<T, E::DecodeError> {
+    let mut bytes = bytes;
+    T::decode(&mut bytes)
 }
 
 // /// Encoding that allows any type implementing `serde::Serialize` and `serde::Deserialize` to be

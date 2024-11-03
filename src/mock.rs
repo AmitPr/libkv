@@ -16,8 +16,9 @@ impl<T: ToString + FromStr> Encodable<DisplayEncoding> for T {
 }
 
 impl<T: Display + FromStr<Err: Into<Box<dyn std::error::Error>>>> Decodable<DisplayEncoding> for T {
-    fn decode(bytes: &[u8]) -> Result<Self, Infallible> {
+    fn decode(bytes: &mut &[u8]) -> Result<Self, Infallible> {
         let s = std::str::from_utf8(bytes).unwrap();
+        *bytes = &bytes[s.len()..];
         Ok(Self::from_str(s).unwrap_or_else(|_| panic!("Failed to parse {}", s)))
     }
 }

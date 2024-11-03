@@ -1,14 +1,15 @@
 use std::{borrow::Cow, marker::PhantomData, ops::Bound};
 
 use crate::{
-    DataStructure, DsIter, IterableStorage, KeySerde, KeySerializeError, NonTerminal, Order,
+    Codec, DataStructure, DsIter, IterableStorage, KeyEncoding, KeySerializeError, NonTerminal,
+    Order,
 };
 
-pub struct Map<'a, K: KeySerde, V: DataStructure> {
+pub struct Map<'a, K: Codec<KeyEncoding>, V: DataStructure> {
     prefix: Cow<'a, [u8]>,
     _marker: PhantomData<(K, V)>,
 }
-impl<'a, K: KeySerde, V: DataStructure> DataStructure for Map<'a, K, V> {
+impl<'a, K: Codec<KeyEncoding>, V: DataStructure> DataStructure for Map<'a, K, V> {
     type Key = (K, Option<V::Key>);
     type DsType = NonTerminal;
     type Enc = V::Enc;
@@ -26,7 +27,7 @@ impl<'a, K: KeySerde, V: DataStructure> DataStructure for Map<'a, K, V> {
     }
 }
 
-impl<K: KeySerde, V: DataStructure> Map<'static, K, V> {
+impl<K: Codec<KeyEncoding>, V: DataStructure> Map<'static, K, V> {
     pub const fn new(key: &'static [u8]) -> Self {
         Self {
             prefix: Cow::Borrowed(key),
@@ -35,7 +36,7 @@ impl<K: KeySerde, V: DataStructure> Map<'static, K, V> {
     }
 }
 
-impl<'a, K: KeySerde, V: DataStructure> Map<'a, K, V> {
+impl<'a, K: Codec<KeyEncoding>, V: DataStructure> Map<'a, K, V> {
     fn key(&self, key: &K) -> Result<Vec<u8>, KeySerializeError> {
         let encoded = key.encode()?;
         let full = [self.prefix.as_ref(), &encoded].concat();

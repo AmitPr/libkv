@@ -1,6 +1,6 @@
 use std::marker::PhantomData;
 
-use crate::{Codec, Decodable, Encoding, Iter, KeySerde, StorageError};
+use crate::{Codec, Decodable, Encoding, Iter, KeyEncoding, StorageError};
 
 /// Trait representing an arbitrary data structure that can be used in a
 /// Key-Value store.
@@ -19,7 +19,7 @@ use crate::{Codec, Decodable, Encoding, Iter, KeySerde, StorageError};
 ///   should be skipped when iterating over the data structure.
 pub trait DataStructure {
     /// The type of the key used to index the data structure.
-    type Key: KeySerde;
+    type Key: Codec<KeyEncoding>;
     /// The encoding used to serialize and deserialize the data structure.
     type Enc: Encoding;
     /// The value type, that can be (de)serialized using the `Enc` encoding.
@@ -80,13 +80,15 @@ impl<'a, D: DataStructure> Iterator for DsIter<'a, D> {
                 return None;
             }
             let key_bytes = key_bytes.split_off(self.prefix.len());
-            let key = <<D as DataStructure>::Key as KeySerde>::decode(&mut key_bytes.as_slice())
-                .map(|k| (D::should_skip_key(&k), k));
+            let key = <<D as DataStructure>::Key as Decodable<KeyEncoding>>::decode(
+                &mut key_bytes.as_slice(),
+            )
+            .map(|k| (D::should_skip_key(&k), k));
 
             match key {
                 Ok((true, _)) => continue,
                 Ok((false, key)) => {
-                    let val = <D::Value as Decodable<D::Enc>>::decode(&val_bytes)
+                    let val = <D::Value as Decodable<D::Enc>>::decode(&mut val_bytes.as_slice())
                         .map_err(StorageError::ValueDeserialize);
                     return Some(val.map(|val| (key, val)));
                 }

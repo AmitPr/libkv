@@ -1,4 +1,6 @@
-use super::{KeySerde, KeySerializeError};
+use crate::{Encodable, KeyEncoding};
+
+use super::KeySerializeError;
 use std::ops::Bound;
 
 pub enum Order {
@@ -7,20 +9,27 @@ pub enum Order {
 }
 
 pub trait Storage {
-    fn get<K: KeySerde>(&self, key: &K) -> Result<Option<Vec<u8>>, KeySerializeError> {
+    fn get<K: Encodable<KeyEncoding>>(
+        &self,
+        key: &K,
+    ) -> Result<Option<Vec<u8>>, KeySerializeError> {
         Ok(self.get_raw(&key.encode()?))
     }
 
     fn get_raw(&self, key: &[u8]) -> Option<Vec<u8>>;
 }
 pub trait StorageMut: Storage {
-    fn set<K: KeySerde>(&mut self, key: &K, value: Vec<u8>) -> Result<(), KeySerializeError> {
+    fn set<K: Encodable<KeyEncoding>>(
+        &mut self,
+        key: &K,
+        value: Vec<u8>,
+    ) -> Result<(), KeySerializeError> {
         self.set_raw(key.encode()?, value);
         Ok(())
     }
     fn set_raw(&mut self, key: Vec<u8>, value: Vec<u8>);
 
-    fn delete<K: KeySerde>(&mut self, key: &K) -> Result<(), KeySerializeError> {
+    fn delete<K: Encodable<KeyEncoding>>(&mut self, key: &K) -> Result<(), KeySerializeError> {
         self.delete_raw(&key.encode()?);
         Ok(())
     }
@@ -30,7 +39,7 @@ pub trait StorageMut: Storage {
 pub type Iter<'a, T> = Box<dyn Iterator<Item = T> + 'a>;
 
 pub trait IterableStorage: Storage {
-    fn keys<K: KeySerde>(
+    fn keys<K: Encodable<KeyEncoding>>(
         &self,
         low: Bound<K>,
         high: Bound<K>,
@@ -38,7 +47,7 @@ pub trait IterableStorage: Storage {
     ) -> Result<Iter<Vec<u8>>, KeySerializeError>;
 
     #[allow(clippy::type_complexity)]
-    fn iter<K: KeySerde>(
+    fn iter<K: Encodable<KeyEncoding>>(
         &self,
         low: Bound<K>,
         high: Bound<K>,
@@ -113,7 +122,7 @@ fn clone_k((k, _): (&Vec<u8>, &Vec<u8>)) -> Vec<u8> {
 }
 
 impl IterableStorage for std::collections::BTreeMap<Vec<u8>, Vec<u8>> {
-    fn keys<K: KeySerde>(
+    fn keys<K: Encodable<KeyEncoding>>(
         &self,
         low: Bound<K>,
         high: Bound<K>,
@@ -134,7 +143,7 @@ impl IterableStorage for std::collections::BTreeMap<Vec<u8>, Vec<u8>> {
         }
     }
 
-    fn iter<K: KeySerde>(
+    fn iter<K: Encodable<KeyEncoding>>(
         &self,
         low: Bound<K>,
         high: Bound<K>,

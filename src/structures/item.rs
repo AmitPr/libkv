@@ -1,15 +1,18 @@
 use std::{borrow::Cow, marker::PhantomData};
 
 use crate::{
-    Codec, DataStructure, Encoding, KeySerde, KeyType, Storage, StorageError, StorageMut, Terminal,
+    Codec, DataStructure, Encodable, Encoding, KeyEncoding, KeyType, Storage, StorageError,
+    StorageMut, Terminal,
 };
 
-pub struct Item<'a, V: Codec<Enc>, Enc: Encoding, K: KeySerde = Cow<'a, [u8]>>(
+pub struct Item<'a, V: Codec<Enc>, Enc: Encoding, K: Codec<KeyEncoding> = Cow<'a, [u8]>>(
     KeyType<K>,
     PhantomData<(&'a K, V, Enc)>,
 );
 
-impl<'a, V: Codec<Enc>, Enc: Encoding, K: KeySerde> DataStructure for Item<'a, V, Enc, K> {
+impl<'a, V: Codec<Enc>, Enc: Encoding, K: Codec<KeyEncoding>> DataStructure
+    for Item<'a, V, Enc, K>
+{
     type Key = K;
     type Enc = Enc;
     type Value = V;
@@ -30,14 +33,14 @@ impl<V: Codec<Enc>, Enc: Encoding> Item<'static, V, Enc> {
     }
 }
 
-impl<'a, V: Codec<Enc>, Enc: Encoding, K: KeySerde> Item<'a, V, Enc, K> {
+impl<'a, V: Codec<Enc>, Enc: Encoding, K: Codec<KeyEncoding>> Item<'a, V, Enc, K> {
     pub fn with_key(key: K) -> Self {
         Self(KeyType::Key(key), PhantomData)
     }
 
     pub fn may_load<S: Storage>(&self, storage: &S) -> Result<Option<V>, StorageError<Enc>> {
         let bytes = storage.get(&self.0)?;
-        let value = bytes.map(|b| V::decode(b.as_slice())).transpose();
+        let value = bytes.map(|b| V::decode(&mut b.as_slice())).transpose();
         value.map_err(StorageError::ValueDeserialize)
     }
 

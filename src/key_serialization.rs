@@ -1,41 +1,54 @@
+use crate::{Decodable, Encodable, Encoding};
+
 use super::{KeyDeserializeError, KeySerializeError};
 
-pub trait KeySerde: Sized {
-    fn encode(&self) -> Result<Vec<u8>, KeySerializeError>;
-    fn decode(bytes: &mut &[u8]) -> Result<Self, KeyDeserializeError>;
+/// Encoding implemented for types that serialize to byte strings
+///
+/// If the type is [`Ord`] or [`PartialOrd`], it is the implementor's
+/// responsibility to ensure that the serialized representation preserves
+/// lexicographic ordering guarantees.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct KeyEncoding;
+impl Encoding for KeyEncoding {
+    type EncodeError = KeySerializeError;
+    type DecodeError = KeyDeserializeError;
 }
 
 /// Represents a key that can be either a pre-serialized byte sequence or a key of type K.
-pub enum KeyType<K: KeySerde> {
+pub enum KeyType<K> {
     /// A serialized key (of assumed type K).
     Raw(Vec<u8>),
     /// A key of type K, pre-serialization.
     Key(K),
 }
-impl<K: KeySerde> KeySerde for KeyType<K> {
+impl<K: Encodable<KeyEncoding>> Encodable<KeyEncoding> for KeyType<K> {
     fn encode(&self) -> Result<Vec<u8>, KeySerializeError> {
         match self {
             Self::Raw(key) => Ok(key.clone()),
             Self::Key(key) => key.encode(),
         }
     }
+}
 
+impl<K: Decodable<KeyEncoding>> Decodable<KeyEncoding> for KeyType<K> {
     fn decode(bytes: &mut &[u8]) -> Result<Self, KeyDeserializeError> {
         K::decode(bytes).map(Self::Key)
     }
 }
 
-impl KeySerde for () {
+impl Encodable<KeyEncoding> for () {
     fn encode(&self) -> Result<Vec<u8>, KeySerializeError> {
         Ok(vec![])
     }
+}
 
+impl Decodable<KeyEncoding> for () {
     fn decode(_: &mut &[u8]) -> Result<Self, KeyDeserializeError> {
         Ok(())
     }
 }
 
-impl KeySerde for String {
+impl Encodable<KeyEncoding> for String {
     fn encode(&self) -> Result<Vec<u8>, KeySerializeError> {
         let length = encode_length(self.len())?;
         let mut encoded = Vec::with_capacity(self.len() + length.len());
@@ -43,7 +56,9 @@ impl KeySerde for String {
         encoded.extend(self.as_bytes());
         Ok(encoded)
     }
+}
 
+impl Decodable<KeyEncoding> for String {
     fn decode(bytes: &mut &[u8]) -> Result<Self, KeyDeserializeError> {
         let len = decode_length(bytes)?;
         let (data, rest) = bytes
@@ -54,7 +69,7 @@ impl KeySerde for String {
     }
 }
 
-impl KeySerde for std::borrow::Cow<'_, [u8]> {
+impl Encodable<KeyEncoding> for std::borrow::Cow<'_, [u8]> {
     fn encode(&self) -> Result<Vec<u8>, KeySerializeError> {
         let length = encode_length(self.len())?;
         let mut encoded = Vec::with_capacity(self.len() + length.len());
@@ -62,7 +77,9 @@ impl KeySerde for std::borrow::Cow<'_, [u8]> {
         encoded.extend(self.iter());
         Ok(encoded)
     }
+}
 
+impl Decodable<KeyEncoding> for std::borrow::Cow<'_, [u8]> {
     fn decode(bytes: &mut &[u8]) -> Result<Self, KeyDeserializeError> {
         let len = decode_length(bytes)?;
         let (data, rest) = bytes
@@ -73,7 +90,7 @@ impl KeySerde for std::borrow::Cow<'_, [u8]> {
     }
 }
 
-impl KeySerde for Vec<u8> {
+impl Encodable<KeyEncoding> for Vec<u8> {
     fn encode(&self) -> Result<Vec<u8>, KeySerializeError> {
         let length = encode_length(self.len())?;
         let mut encoded = Vec::with_capacity(self.len() + length.len());
@@ -81,7 +98,9 @@ impl KeySerde for Vec<u8> {
         encoded.extend(self);
         Ok(encoded)
     }
+}
 
+impl Decodable<KeyEncoding> for Vec<u8> {
     fn decode(bytes: &mut &[u8]) -> Result<Self, KeyDeserializeError> {
         let len = decode_length(bytes)?;
         let (data, rest) = bytes
@@ -92,14 +111,16 @@ impl KeySerde for Vec<u8> {
     }
 }
 
-impl<K: KeySerde> KeySerde for Option<K> {
+impl<K: Encodable<KeyEncoding>> Encodable<KeyEncoding> for Option<K> {
     fn encode(&self) -> Result<Vec<u8>, KeySerializeError> {
         match self {
             Some(k) => k.encode(),
             None => Ok(vec![]),
         }
     }
+}
 
+impl<K: Decodable<KeyEncoding>> Decodable<KeyEncoding> for Option<K> {
     fn decode(bytes: &mut &[u8]) -> Result<Self, KeyDeserializeError> {
         if bytes.is_empty() {
             return Ok(None);
@@ -111,7 +132,7 @@ impl<K: KeySerde> KeySerde for Option<K> {
 macro_rules! impl_tuple_keyserde {
     ($l: ident $f: ident, $($v:ident $t:ident),+) => {
         impl_tuple_keyserde!($($v $t),+);
-        impl<$f: KeySerde, $($t:KeySerde,)+> KeySerde for ($f, $($t,)+)
+        impl<$f: Encodable<KeyEncoding>, $($t:Encodable<KeyEncoding>,)+> Encodable<KeyEncoding> for ($f, $($t,)+)
         {
             fn encode(&self) -> Result<Vec<u8>, KeySerializeError> {
 
@@ -123,7 +144,9 @@ macro_rules! impl_tuple_keyserde {
                 )+
                 Ok(encoded)
             }
-
+        }
+        impl<$f: Decodable<KeyEncoding>, $($t:Decodable<KeyEncoding>,)+> Decodable<KeyEncoding> for ($f, $($t,)+)
+        {
             fn decode(bytes: &mut &[u8]) -> Result<Self, KeyDeserializeError> {
                 let $l = $f::decode(bytes)?;
                 $(
@@ -142,11 +165,13 @@ impl_tuple_keyserde!(t T, u U, v V, w W, x X, y Y, z Z, a A, b B, c C, d D, e E)
 macro_rules! impl_uint_keyserde {
     ($($t:ty),+) => {
         $(
-            impl KeySerde for $t {
+            impl Encodable<KeyEncoding> for $t {
                 fn encode(&self) -> Result<Vec<u8>, KeySerializeError> {
                     Ok(self.to_be_bytes().to_vec())
                 }
+            }
 
+            impl Decodable<KeyEncoding> for $t {
                 fn decode(bytes: &mut &[u8]) -> Result<Self, KeyDeserializeError> {
                     type Bytes = [u8; std::mem::size_of::<$t>()];
                     let (int_bytes, rest): (&Bytes, &[u8]) =
@@ -169,14 +194,16 @@ impl_uint_keyserde!(u8, u16, u32, u64, u128, usize);
 macro_rules! impl_sint_keyserde {
     ($($t:ty),+) => {
         $(
-            impl KeySerde for $t {
+            impl Encodable<KeyEncoding> for $t {
                 fn encode(&self) -> Result<Vec<u8>, KeySerializeError> {
                     // Map signed to unsigned
                     // x = x ^ $t::MIN
                     let x = self ^ <$t>::MIN;
                     Ok(x.to_be_bytes().to_vec())
                 }
+            }
 
+            impl Decodable<KeyEncoding> for $t {
                 fn decode(bytes: &mut &[u8]) -> Result<Self, KeyDeserializeError> {
                     type Bytes = [u8; std::mem::size_of::<$t>()];
                     let (int_bytes, rest): (&Bytes, &[u8]) =
@@ -203,6 +230,11 @@ impl_sint_keyserde!(i8, i16, i32, i64, i128, isize);
 /// [5-7 bits]: 4 high bits of len
 /// [8-15 bits]: 8 next bits of len
 /// ...
+///
+/// In other words: a 4-bit length-prefixed variable-length integer encoding.
+///
+/// This format can encode any unsigned value up to 2^125 - 1 (2^4 * 8 + 4 bits)
+/// Serialized, this has the nice property that it obeys lexicographic ordering.
 fn encode_length(mut len: usize) -> Result<Vec<u8>, KeySerializeError> {
     if len <= 0xf {
         return Ok(vec![len as u8]);
@@ -222,7 +254,7 @@ fn encode_length(mut len: usize) -> Result<Vec<u8>, KeySerializeError> {
     Ok(bytes)
 }
 
-/// Decodes a compact integer from the format used in `encode_length`.
+/// Decodes an unsigned integer from the format used in [`encode_length`].
 fn decode_length(bytes: &mut &[u8]) -> Result<usize, KeyDeserializeError> {
     let first = bytes
         .first()
@@ -248,12 +280,38 @@ fn decode_length(bytes: &mut &[u8]) -> Result<usize, KeyDeserializeError> {
 
 #[cfg(test)]
 mod test {
-    use super::*;
+    use crate::{
+        decode, encode,
+        key_serialization::{decode_length, encode_length},
+        KeyEncoding,
+    };
 
     #[test]
     fn test_length_serde() {
         let test_cases = vec![
-            0, 1, 15, 16, 255, 256, 257, 1024, 1025, 1026, 4095, 4096, 4097, 65535, 65536, 65537,
+            0,
+            1,
+            15,
+            16,
+            255,
+            256,
+            257,
+            1024,
+            1025,
+            1026,
+            4095,
+            4096,
+            4097,
+            65535,
+            65536,
+            65537,
+            0xFFFFFFFF,
+            0x100000000,
+            0x100000001,
+            0xFFFFFFFFFFFFFFFF,
+            0x7FFFFFFFFFFFFFFF,
+            0x8000000000000000,
+            0x8000000000000001,
         ];
         for len in test_cases {
             let encoded = encode_length(len).unwrap();
@@ -265,48 +323,49 @@ mod test {
     #[test]
     fn test_keyserde() {
         let key = 42usize;
-        let encoded = key.encode().unwrap();
-        let decoded = usize::decode(&mut encoded.as_slice()).unwrap();
+        let encoded = encode::<KeyEncoding>(&key).unwrap();
+        let decoded = decode::<usize, KeyEncoding>(encoded.as_slice()).unwrap();
         assert_eq!(key, decoded);
 
         let key = 42u64;
-        let encoded = key.encode().unwrap();
-        let decoded = u64::decode(&mut encoded.as_slice()).unwrap();
+        let encoded = encode::<KeyEncoding>(&key).unwrap();
+        let decoded = decode::<u64, KeyEncoding>(encoded.as_slice()).unwrap();
         assert_eq!(key, decoded);
 
         let key = 42i64;
-        let encoded = key.encode().unwrap();
-        let decoded = i64::decode(&mut encoded.as_slice()).unwrap();
+        let encoded = encode::<KeyEncoding>(&key).unwrap();
+        let decoded = decode::<i64, KeyEncoding>(encoded.as_slice()).unwrap();
         assert_eq!(key, decoded);
 
         let key = -42i64;
-        let encoded = key.encode().unwrap();
-        let decoded = i64::decode(&mut encoded.as_slice()).unwrap();
+        let encoded = encode::<KeyEncoding>(&key).unwrap();
+        let decoded = decode::<i64, KeyEncoding>(encoded.as_slice()).unwrap();
         assert_eq!(key, decoded);
 
         let key = "hello".to_string();
-        let encoded = key.encode().unwrap();
-        let decoded = String::decode(&mut encoded.as_slice()).unwrap();
+        let encoded = encode::<KeyEncoding>(&key).unwrap();
+        let decoded = decode::<String, KeyEncoding>(encoded.as_slice()).unwrap();
         assert_eq!(key, decoded);
 
         let key = vec![1, 2, 3, 4];
-        let encoded = key.encode().unwrap();
-        let decoded = Vec::<u8>::decode(&mut encoded.as_slice()).unwrap();
+        let encoded = encode::<KeyEncoding>(&key).unwrap();
+        let decoded = decode::<Vec<u8>, KeyEncoding>(encoded.as_slice()).unwrap();
         assert_eq!(key, decoded);
 
         let key = (42usize, "hello".to_string());
-        let encoded = key.encode().unwrap();
-        let decoded = <(usize, String)>::decode(&mut encoded.as_slice()).unwrap();
+        let encoded = encode::<KeyEncoding>(&key).unwrap();
+        let decoded = decode::<(usize, String), KeyEncoding>(encoded.as_slice()).unwrap();
         assert_eq!(key, decoded);
 
         let key = (42usize, "hello".to_string(), vec![1, 2, 3, 4]);
-        let encoded = key.encode().unwrap();
-        let decoded = <(usize, String, Vec<u8>)>::decode(&mut encoded.as_slice()).unwrap();
+        let encoded = encode::<KeyEncoding>(&key).unwrap();
+        let decoded = decode::<(usize, String, Vec<u8>), KeyEncoding>(encoded.as_slice()).unwrap();
         assert_eq!(key, decoded);
 
         let key = (42usize, "hello".to_string(), vec![1, 2, 3, 4], 42u64);
-        let encoded = key.encode().unwrap();
-        let decoded = <(usize, String, Vec<u8>, u64)>::decode(&mut encoded.as_slice()).unwrap();
+        let encoded = encode::<KeyEncoding>(&key).unwrap();
+        let decoded =
+            decode::<(usize, String, Vec<u8>, u64), KeyEncoding>(encoded.as_slice()).unwrap();
         assert_eq!(key, decoded);
     }
 }
